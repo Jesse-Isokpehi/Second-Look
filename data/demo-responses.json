@@ -1,0 +1,136 @@
+{
+  "note": "Pre-written answers for demo mode. A claim matches an entry when every keyword appears in it. Confidence is 0-100: High 70-100, Medium 40-69, Low under 40.",
+  "fallback": {
+    "verdict": "UNCLEAR",
+    "confidence": 20,
+    "reasons": [
+      "Demo mode only has prepared answers for a small set of example claims.",
+      "This claim is not one of them, so no real check was made.",
+      "Treat this as “no answer” and check another source."
+    ],
+    "note": "Simulated response. No AI model was asked about this claim."
+  },
+  "claims": [
+    {
+      "claim": "Cristiano Ronaldo has 6 Ballon d’Ors",
+      "keywords": ["ronaldo", "ballon"],
+      "verdict": "FALSE",
+      "confidence": 88,
+      "reasons": [
+        "Cristiano Ronaldo has won the Ballon d’Or five times: 2008, 2013, 2014, 2016 and 2017.",
+        "The claim is off by one, which is an easy slip to make from memory.",
+        "Fairly sure because award winners are well documented."
+      ]
+    },
+    {
+      "claim": "Hal Jordan is a Marvel character",
+      "keywords": ["hal jordan"],
+      "verdict": "FALSE",
+      "confidence": 92,
+      "reasons": [
+        "Hal Jordan is Green Lantern, a DC Comics character.",
+        "He first appeared in DC’s Showcase #22 in 1959.",
+        "Very sure because publisher ownership of a character is clear-cut."
+      ]
+    },
+    {
+      "claim": "The Eiffel Tower grows taller in summer",
+      "keywords": ["eiffel", "summer"],
+      "verdict": "TRUE",
+      "confidence": 66,
+      "reasons": [
+        "The tower is made of iron, which expands as it warms up.",
+        "On hot days it is reported to stand several centimetres taller.",
+        "Less sure about the exact amount, which varies between reports."
+      ]
+    },
+    {
+      "claim": "Cracking your knuckles causes arthritis",
+      "keywords": ["knuckles", "arthritis"],
+      "verdict": "FALSE",
+      "confidence": 64,
+      "reasons": [
+        "Studies comparing people who crack their knuckles with people who don’t have not found more arthritis.",
+        "The popping sound comes from gas bubbles in the joint fluid, not from damage.",
+        "Less sure because those studies are small."
+      ]
+    },
+    {
+      "claim": "Lightning never strikes the same place twice",
+      "keywords": ["lightning", "twice"],
+      "verdict": "TRUE",
+      "confidence": 34,
+      "reasons": [
+        "The saying is very widely repeated, which suggests there may be something to it.",
+        "On the other hand, tall towers are reported to be struck many times a year, which points the other way.",
+        "Not at all sure because these two points conflict."
+      ]
+    },
+    {
+      "claim": "The Great Wall of China is visible from space",
+      "keywords": ["great wall", "space"],
+      "verdict": "FALSE",
+      "confidence": 81,
+      "reasons": [
+        "The wall is long but only a few metres wide, and a similar colour to the land around it.",
+        "Astronauts have said they could not pick it out with the naked eye from orbit.",
+        "Fairly sure, though “visible from space” depends on how high up you mean."
+      ]
+    },
+    {
+      "claim": "We only use 10% of our brains",
+      "keywords": ["10%", "brain"],
+      "verdict": "FALSE",
+      "confidence": 90,
+      "reasons": [
+        "Brain scans show activity across the whole brain, even during sleep.",
+        "Damage to almost any part of the brain has some effect.",
+        "Very sure because this is a long-standing, well-studied myth."
+      ]
+    },
+    {
+      "claim": "Bats are blind",
+      "keywords": ["bats", "blind"],
+      "verdict": "FALSE",
+      "confidence": 85,
+      "reasons": [
+        "Bats have working eyes and can see.",
+        "Many species also use echolocation, which may be where the idea comes from.",
+        "Fairly sure because this is well established in zoology."
+      ]
+    },
+    {
+      "claim": "Bulls are angered by the colour red",
+      "keywords": ["bulls", "red"],
+      "verdict": "FALSE",
+      "confidence": 62,
+      "reasons": [
+        "Cattle are thought to have limited colour vision and cannot tell red apart well.",
+        "It is the movement of the cape that seems to provoke the charge.",
+        "Less sure because what “angers” an animal is hard to measure."
+      ]
+    },
+    {
+      "claim": "Goldfish have a three-second memory",
+      "keywords": ["goldfish", "memory"],
+      "verdict": "FALSE",
+      "confidence": 58,
+      "reasons": [
+        "Studies have trained goldfish to remember signals for weeks or months.",
+        "The “three seconds” idea seems to be a popular myth, not a research finding.",
+        "Less sure because memory length varies between studies and tasks."
+      ]
+    },
+    {
+      "claim": "Drinking coffee stunts children’s growth",
+      "keywords": ["coffee", "growth"],
+      "verdict": "FALSE",
+      "confidence": 60,
+      "reasons": [
+        "No strong evidence links coffee to reduced height.",
+        "The belief may come from old adverts rather than research.",
+        "Less sure because caffeine still has other effects on children."
+      ]
+    }
+  ]
+}
