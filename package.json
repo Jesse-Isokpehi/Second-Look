@@ -1,0 +1,10 @@
+{
+  "name": "second-look",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Check a claim you saw online. The AI says what it thinks and how sure it is; the final call is yours.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}
