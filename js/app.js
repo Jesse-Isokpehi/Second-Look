@@ -3,13 +3,19 @@
  * One state object, one render() per change. Screens:
  *   start -> loading -> verdict (with "Why?" on demand)
  *                    -> guess -> compare   (second-look prompt)
+ *                    -> error              (no answer: retry, demo mode or edit)
  *   summary (from "End session")
  */
 (function (SL) {
   'use strict';
 
   var verdicts = SL.verdicts;
-  var session = SL.session;
+  var config = window.SECOND_LOOK_CONFIG;
+  var tracker = SL.reliance.createTracker();
+
+  var MAX_LENGTH = config.maxClaimLength;
+  var DOUBLE_CLICK_MS = 400; // clicks this soon after a screen change are ignored
+  var demoMode = !config.apiUrl;
 
   var EXAMPLES = [
     'Hal Jordan is a Marvel character',
@@ -28,18 +34,20 @@
   var announcerEl = document.getElementById('announcer');
 
   var state = freshState();
-  var pending = null; // the in-flight AI request, if any
+  var pending = null;   // the in-flight AI request, if any
+  var screenChangedAt = 0;
 
   function freshState() {
     return {
       view: 'start',
       draft: '',
-      error: '',
       claim: '',
+      errorKind: '',
       result: null,
       whyOpen: false,
       whyOpened: false,
       shownAt: 0,
+      escalated: false,
       entry: null,        // logged entry for the compare screen
       triggerInfoOpen: false
     };
@@ -68,7 +76,7 @@
 
   function badge(result, extraClass) {
     return '<span class="badge badge--' + result.level.toLowerCase() + (extraClass ? ' ' + extraClass : '') + '">' +
-      result.level + ' confidence · ' + result.pct + '%</span>';
+      result.level + ' confidence · ' + result.confidence + '%</span>';
   }
 
   function claimCard(large) {
@@ -87,12 +95,25 @@
       '<ul class="why-panel__list">' +
         result.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') +
       '</ul>' +
-      '<span class="why-panel__source">' + esc(result.source) + '</span>' +
+      '<span class="why-panel__source">' + esc(result.note) + '</span>' +
       '</section>';
   }
 
-  function seconds(ms) {
-    return Math.max(1, Math.round(ms / 1000)) + ' s';
+  function seconds(value) {
+    return String(Math.max(1, Math.round(value)));
+  }
+
+  function cleanClaim(text) {
+    var claim = String(text).replace(/\s+/g, ' ').trim();
+    // Drop quote marks pasted around the claim; the claim card adds its own.
+    return claim.replace(/^["“”']+|["“”']+$/g, '').trim();
+  }
+
+  function lengthMessage(length) {
+    if (length >= MAX_LENGTH) {
+      return 'That’s the ' + MAX_LENGTH + ' character limit. Trim it down to one short claim.';
+    }
+    return length + ' / ' + MAX_LENGTH;
   }
 
   function announce(message) {
@@ -112,14 +133,14 @@
       '</div>' +
       '<form class="card card--raised claim-form" data-form="claim" novalidate>' +
         '<label class="field-label" for="claim">Claim to check</label>' +
-        '<textarea class="claim-input" id="claim" name="claim" rows="4" maxlength="500"' +
-          ' placeholder="e.g. “Cristiano Ronaldo has 6 Ballon d’Ors”"' +
-          (state.error ? ' aria-invalid="true" aria-describedby="claim-error"' : '') + '>' +
+        '<textarea class="claim-input" id="claim" name="claim" rows="4" maxlength="' + MAX_LENGTH + '"' +
+          ' aria-describedby="claim-hint claim-length"' +
+          ' placeholder="e.g. “Cristiano Ronaldo has 6 Ballon d’Ors”">' +
           esc(state.draft) + '</textarea>' +
-        (state.error ? '<p class="field-error" id="claim-error">' + esc(state.error) + '</p>' : '') +
+        '<span class="hint claim-length" id="claim-length" role="status"></span>' +
         '<div class="claim-form__footer">' +
-          '<span class="hint">Works best with one claim at a time.</span>' +
-          '<button type="submit" class="btn btn--primary btn--wide">Take a second look</button>' +
+          '<span class="hint" id="claim-hint"></span>' +
+          '<button type="submit" class="btn btn--primary btn--wide" id="claim-submit">Take a second look</button>' +
         '</div>' +
       '</form>' +
       '<div class="examples">' +
@@ -182,10 +203,12 @@
           badge(result) +
         '</div>' +
         '<div class="meter-block">' +
-          '<div class="meter" role="img" aria-label="Confidence ' + result.pct + ' percent">' +
-            '<div class="meter__fill meter__fill--' + level + '" style="width: ' + result.pct + '%"></div>' +
+          '<div class="meter" role="img" aria-label="Confidence ' + result.confidence + ' percent">' +
+            '<div class="meter__fill meter__fill--' + level + '" style="width: ' + result.confidence + '%"></div>' +
           '</div>' +
-          (open ? '' : '<span class="note">This is the AI\'s own estimate of how sure it is. It can still be wrong.</span>') +
+          (result.malformed
+            ? '<span class="note note--strong">' + esc(result.note) + '</span>'
+            : (open ? '' : '<span class="note">This is the AI\'s own estimate of how sure it is. It can still be wrong.</span>')) +
         '</div>' +
         (open ? whyPanel(result) : '') +
         '<div class="button-row' + (open ? '' : ' button-row--spaced') + '">' +
@@ -211,7 +234,7 @@
         '</svg>' +
         '<div class="prompt-banner__text">' +
           '<h1 class="prompt-banner__title" tabindex="-1" data-focus>Time for a second look</h1>' +
-          '<span class="prompt-banner__body">You\'ve agreed with the last ' + session.STREAK_LENGTH +
+          '<span class="prompt-banner__body">You\'ve agreed with the last ' + tracker.config.STREAK_LENGTH +
             ' answers quickly. The AI is less sure about this one, so make your own call first.</span>' +
         '</div>' +
       '</div>' +
@@ -234,7 +257,7 @@
         '<button type="button" class="link-button link-button--start" data-action="toggle-trigger-info"' +
           ' aria-expanded="' + state.triggerInfoOpen + '" aria-controls="trigger-info">Why am I seeing this?</button>' +
         '<p class="trigger-info" id="trigger-info"' + (state.triggerInfoOpen ? '' : ' hidden') + '>' +
-          'You agreed ' + session.STREAK_LENGTH + ' times in a row, each in under ' + (session.QUICK_LIMIT_MS / 1000) +
+          'You agreed ' + tracker.config.STREAK_LENGTH + ' times in a row, each in under ' + tracker.config.QUICK_SECONDS +
           ' seconds, without opening “Why?”. When that happens and the AI is not highly confident about the next claim, ' +
           'Second Look asks for your view first so you can compare.' +
         '</p>' +
@@ -251,10 +274,10 @@
     if (result.verdict === 'UNCLEAR') {
       return { title: 'The AI couldn\'t call this one', body: 'It did not reach a TRUE or FALSE answer.' + next };
     }
-    if (entry.guess === 'NOT SURE') {
+    if (entry.ownCall === 'NOT SURE') {
       return { title: 'You weren\'t sure', body: unsureNote + next };
     }
-    if (entry.guess === result.verdict) {
+    if (entry.ownCall === result.verdict) {
       return {
         title: 'You and the AI agree',
         body: unsureNote + ' Agreeing doesn\'t settle it, so it\'s still worth checking its reasoning or another source.'
@@ -273,7 +296,7 @@
       '<div class="compare">' +
         '<div class="card compare__card compare__card--yours">' +
           '<span class="eyebrow">Your call</span>' +
-          '<span class="compare__value">' + esc(entry.guess) + '</span>' +
+          '<span class="compare__value">' + esc(entry.ownCall) + '</span>' +
           '<span class="note">Made before seeing the AI</span>' +
         '</div>' +
         '<div class="card compare__card">' +
@@ -296,16 +319,16 @@
 
   function actionLabel(entry) {
     var why = entry.whyOpened ? ', opened Why?' : '';
-    if (entry.prompted) {
-      var said = entry.guess === 'NOT SURE' ? 'you weren\'t sure' : 'you said ' + entry.guess;
+    if (entry.choice === 'own-call') {
+      var said = entry.ownCall === 'NOT SURE' ? 'you weren\'t sure' : 'you said ' + entry.ownCall;
       return 'Second-look prompt · ' + said + why;
     }
-    return (entry.action === 'agree' ? 'Agreed' : 'Disagreed') + why;
+    return (entry.choice === 'agree' ? 'Agreed' : 'Disagreed') + why;
   }
 
   function summaryView() {
-    var stats = session.stats();
-    var entries = session.entries();
+    var stats = tracker.stats();
+    var entries = tracker.entries();
 
     function stat(value, label, accent) {
       return '<div class="stat' + (accent ? ' stat--accent' : '') + '"><dt>' + label + '</dt><dd>' + value + '</dd></div>';
@@ -313,12 +336,12 @@
 
     var rows = entries.length
       ? entries.map(function (e) {
-          return '<tr' + (e.prompted ? ' class="log-table__row--prompted"' : '') + '>' +
+          return '<tr' + (e.escalated ? ' class="log-table__row--prompted"' : '') + '>' +
             '<td class="claim-cell">' + esc(e.claim) + '</td>' +
             '<td>' + e.verdict + '</td>' +
-            '<td>' + e.level + ' · ' + e.pct + '%</td>' +
+            '<td>' + e.level + ' · ' + e.confidence + '%</td>' +
             '<td class="action-cell">' + esc(actionLabel(e)) + '</td>' +
-            '<td class="num">' + seconds(e.timeMs) + '</td>' +
+            '<td class="num">' + seconds(e.decisionSeconds) + '</td>' +
           '</tr>';
         }).join('')
       : '<tr><td class="log-table__empty" colspan="5">No claims checked this session.</td></tr>';
@@ -333,7 +356,7 @@
         stat(stats.agreed, 'Agreed with the AI') +
         stat(stats.disagreed, 'Disagreed') +
         stat(stats.whyOpened, 'Opened “Why?”') +
-        stat(stats.prompts, 'Second-look prompts', true) +
+        stat(stats.escalated, 'Second-look prompts', true) +
       '</dl>' +
       '<div class="table-wrap" tabindex="0" role="region" aria-label="Session log">' +
         '<table class="log-table">' +
@@ -342,7 +365,7 @@
             '<th scope="col">AI verdict</th>' +
             '<th scope="col">Confidence</th>' +
             '<th scope="col">What you did</th>' +
-            '<th scope="col" class="num">Time</th>' +
+            '<th scope="col" class="num">Time (seconds)</th>' +
           '</tr></thead>' +
           '<tbody>' + rows + '</tbody>' +
         '</table>' +
@@ -354,12 +377,49 @@
     '</div>';
   }
 
+  var ERRORS = {
+    timeout: {
+      title: 'The AI took too long to answer',
+      body: 'Nothing came back in time. Your claim has not been checked.'
+    },
+    server: {
+      title: 'The AI service had a problem',
+      body: 'It returned an error instead of an answer. Your claim has not been checked.'
+    },
+    network: {
+      title: 'Couldn’t reach the AI',
+      body: 'Check your internet connection. Your claim has not been checked.'
+    },
+    demo: {
+      title: 'Couldn’t load the demo answers',
+      body: 'The file of prepared answers did not load. If you opened index.html straight from a folder, ' +
+        'open it through a local server instead (see the README).'
+    }
+  };
+
+  function errorView() {
+    var error = ERRORS[demoMode ? 'demo' : state.errorKind] || ERRORS.network;
+    return '<div class="column column--loading">' +
+      claimCard(true) +
+      '<div class="card error-card" role="alert">' +
+        '<h1 class="error-card__title" tabindex="-1" data-focus>' + error.title + '</h1>' +
+        '<p class="error-card__body">' + error.body + '</p>' +
+        '<div class="button-row">' +
+          '<button type="button" class="btn btn--primary" data-action="retry">Try again</button>' +
+          (demoMode ? '' : '<button type="button" class="btn btn--outline" data-action="use-demo">Use demo mode instead</button>') +
+          '<button type="button" class="btn btn--soft" data-action="edit-claim">Edit claim</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   var VIEWS = {
     start: startView,
     loading: loadingView,
     verdict: verdictView,
     guess: guessView,
     compare: compareView,
+    error: errorView,
     summary: summaryView
   };
 
@@ -369,10 +429,28 @@
     verdict: 'The AI\'s verdict · Second Look',
     guess: 'Time for a second look · Second Look',
     compare: 'Your call vs the AI · Second Look',
+    error: 'No answer · Second Look',
     summary: 'Session summary · Second Look'
   };
 
   // ---------- render ----------
+
+  /** Start screen: keep the button, hint and length message in step with the textarea. */
+  function syncClaimForm() {
+    var input = document.getElementById('claim');
+    if (!input) return;
+    var empty = cleanClaim(input.value) === '';
+    var atLimit = input.value.length >= MAX_LENGTH;
+
+    document.getElementById('claim-submit').disabled = empty;
+    document.getElementById('claim-hint').textContent = empty
+      ? 'Type or paste a claim to check it.'
+      : 'Works best with one claim at a time.';
+
+    var lengthEl = document.getElementById('claim-length');
+    lengthEl.textContent = input.value.length ? lengthMessage(input.value.length) : '';
+    lengthEl.classList.toggle('claim-length--limit', atLimit);
+  }
 
   function render(options) {
     var view = state.view;
@@ -380,14 +458,16 @@
     mainEl.className = 'site-main site-main--' + view;
     mainEl.setAttribute('aria-busy', view === 'loading' ? 'true' : 'false');
     mainEl.innerHTML = VIEWS[view]();
+    if (view === 'start') syncClaimForm();
 
     footerEl.textContent = view === 'summary' ? FOOTER_SUMMARY : FOOTER_DEFAULT;
     endSessionEl.hidden = view === 'summary';
+    demoBadgeEl.hidden = !demoMode;
     document.title = TITLES[view];
 
     // The claim on screen counts as checked once its verdict (or prompt) is showing.
     var onScreen = (view === 'verdict' || view === 'guess') ? 1 : 0;
-    countEl.textContent = session.stats().checked + onScreen;
+    countEl.textContent = tracker.stats().checked + onScreen;
 
     if (options && options.keepFocus) return;
     var target = (options && options.focus && mainEl.querySelector(options.focus)) ||
@@ -398,6 +478,7 @@
   function go(view, changes, options) {
     state.view = view;
     Object.keys(changes || {}).forEach(function (key) { state[key] = changes[key]; });
+    screenChangedAt = Date.now();
     render(options);
     window.scrollTo(0, 0);
   }
@@ -405,28 +486,37 @@
   // ---------- actions ----------
 
   function submitClaim() {
-    var input = document.getElementById('claim');
-    var claim = input.value.replace(/\s+/g, ' ').trim();
-    // Drop quote marks the user pasted around the claim; the card adds its own.
-    claim = claim.replace(/^["“”']+|["“”']+$/g, '').trim();
+    if (state.view !== 'start') return;
+    var claim = cleanClaim(document.getElementById('claim').value).slice(0, MAX_LENGTH);
+    if (!claim) return; // the button is disabled; this covers Ctrl+Enter
+    askAbout(claim);
+  }
 
-    if (!claim) {
-      state.draft = input.value;
-      state.error = 'Type or paste a claim to check.';
-      render({ focus: '#claim' });
-      return;
-    }
-
-    go('loading', { claim: claim, draft: '', error: '', result: null, whyOpen: false, whyOpened: false, entry: null, triggerInfoOpen: false });
+  function askAbout(claim) {
+    cancelPending();
+    go('loading', {
+      claim: claim, draft: '', errorKind: '', result: null, entry: null,
+      whyOpen: false, whyOpened: false, escalated: false, triggerInfoOpen: false
+    });
     announce('Taking a look. The AI is weighing up this claim.');
 
-    var request = verdicts.check(claim);
+    var request = verdicts.check(claim, {
+      demo: demoMode,
+      apiUrl: config.apiUrl,
+      demoDataUrl: config.demoDataUrl,
+      timeoutMs: config.timeoutMs
+    });
     pending = request;
+
     request.promise.then(function (result) {
       if (pending !== request) return; // cancelled or superseded
       pending = null;
-      var prompt = session.shouldPrompt(result);
-      go(prompt ? 'guess' : 'verdict', { result: result, shownAt: Date.now() });
+      var escalated = tracker.beginClaim(result.level);
+      go(escalated ? 'guess' : 'verdict', { result: result, escalated: escalated, shownAt: Date.now() });
+    }, function (error) {
+      if (pending !== request) return;
+      pending = null;
+      go('error', { errorKind: error.kind || 'network' });
     });
   }
 
@@ -438,14 +528,36 @@
   }
 
   function backToStart(draft, message) {
-    go('start', { draft: draft || '', error: '', claim: '', result: null, whyOpen: false, entry: null }, { focus: '#claim' });
+    go('start', { draft: draft || '', claim: '', result: null, whyOpen: false, entry: null }, { focus: '#claim' });
     if (message) announce(message);
+  }
+
+  /** Log the decision for the claim on screen. Returns null if it was already logged. */
+  function recordDecision(choice, ownCall) {
+    if (!state.result || state.entry) return null;
+    var result = state.result;
+    state.entry = tracker.record({
+      claim: state.claim,
+      verdict: result.verdict,
+      confidence: result.confidence,
+      level: result.level,
+      choice: choice,
+      ownCall: ownCall,
+      whyOpened: state.whyOpened,
+      decisionSeconds: (Date.now() - state.shownAt) / 1000,
+      escalated: state.escalated
+    });
+    return state.entry;
+  }
+
+  function decide(choice) {
+    if (!recordDecision(choice)) return;
+    backToStart('', 'Logged: you ' + (choice === 'agree' ? 'agreed' : 'disagreed') + ' with the AI. Ready for another claim.');
   }
 
   var actions = {
     'use-example': function (el) {
       state.draft = EXAMPLES[Number(el.dataset.index)];
-      state.error = '';
       render({ focus: '#claim' });
     },
 
@@ -455,12 +567,20 @@
       backToStart(claim, 'Check cancelled.');
     },
 
+    'retry': function () { askAbout(state.claim); },
+
+    'use-demo': function () {
+      demoMode = true;
+      askAbout(state.claim);
+    },
+
+    'edit-claim': function () { backToStart(state.claim); },
+
     'show-why': function () {
       state.whyOpen = true;
       if (!state.whyOpened) {
         state.whyOpened = true;
-        session.noteWhyOpened();
-        if (state.entry) state.entry.whyOpened = true; // compare screen: update the logged row
+        tracker.noteWhyOpened(state.entry); // on the compare screen this also flags the logged row
       }
       render();
     },
@@ -474,15 +594,7 @@
     'disagree': function () { decide('disagree'); },
 
     'guess': function (el) {
-      var entry = session.record({
-        claim: state.claim,
-        result: state.result,
-        action: 'guess',
-        guess: el.dataset.guess,
-        whyOpened: false,
-        timeMs: Date.now() - state.shownAt
-      });
-      go('compare', { entry: entry });
+      if (recordDecision('own-call', el.dataset.guess)) go('compare', { whyOpened: false });
     },
 
     'toggle-trigger-info': function () {
@@ -498,14 +610,14 @@
     },
 
     'new-session': function () {
-      session.reset();
+      tracker.reset();
       state = freshState();
       go('start', {}, { focus: '#claim' });
       announce('New session started.');
     },
 
     'download-csv': function () {
-      var blob = new Blob(['﻿' + session.toCSV()], { type: 'text/csv;charset=utf-8' });
+      var blob = new Blob(['﻿' + tracker.toCSV()], { type: 'text/csv;charset=utf-8' });
       var url = URL.createObjectURL(blob);
       var link = document.createElement('a');
       link.href = url;
@@ -517,22 +629,16 @@
     }
   };
 
-  function decide(action) {
-    session.record({
-      claim: state.claim,
-      result: state.result,
-      action: action,
-      whyOpened: state.whyOpened,
-      timeMs: Date.now() - state.shownAt
-    });
-    backToStart('', 'Logged: you ' + (action === 'agree' ? 'agreed' : 'disagreed') + ' with the AI. Ready for another claim.');
-  }
-
   // ---------- wiring ----------
+
+  /** The second click of a double-click lands on the next screen; ignore it. */
+  function tooSoon() {
+    return Date.now() - screenChangedAt < DOUBLE_CLICK_MS;
+  }
 
   document.addEventListener('click', function (event) {
     var el = event.target.closest('[data-action]');
-    if (!el || el.disabled) return;
+    if (!el || el.disabled || tooSoon()) return;
     var handler = actions[el.dataset.action];
     if (handler) handler(el);
   });
@@ -540,7 +646,7 @@
   mainEl.addEventListener('submit', function (event) {
     if (event.target.matches('[data-form="claim"]')) {
       event.preventDefault();
-      submitClaim();
+      if (!tooSoon()) submitClaim();
     }
   });
 
@@ -553,9 +659,11 @@
   });
 
   mainEl.addEventListener('input', function (event) {
-    if (event.target.id === 'claim') state.draft = event.target.value;
+    if (event.target.id === 'claim') {
+      state.draft = event.target.value;
+      syncClaimForm();
+    }
   });
 
-  demoBadgeEl.hidden = !verdicts.DEMO_MODE;
   render({ keepFocus: true });
 })(window.SecondLook = window.SecondLook || {});

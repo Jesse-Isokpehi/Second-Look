@@ -31,7 +31,7 @@
   --low-bar: #A79BA2;
 
   --disabled-bg: #E7DCE1;
-  --focus: #C9A9B8;
+  --focus: #5C3346;
 
   --radius-card: 14px;
   --radius-control: 10px;
@@ -140,7 +140,8 @@ button { font-family: inherit; }
 .site-main:focus { outline: none; }
 
 .site-main--start { padding-top: 64px; padding-bottom: 64px; }
-.site-main--loading { padding-top: 56px; padding-bottom: 56px; }
+.site-main--loading,
+.site-main--error { padding-top: 56px; padding-bottom: 56px; }
 .site-main--verdict { padding-top: 48px; padding-bottom: 48px; }
 
 .column {
@@ -367,8 +368,14 @@ button { font-family: inherit; }
   color: var(--text-muted);
 }
 
-.field-error {
-  margin: 0;
+.claim-length {
+  align-self: flex-end;
+  min-height: 18px;
+  margin-top: -6px;
+}
+
+.claim-length--limit {
+  align-self: flex-start;
   font-size: 14px;
   font-weight: 600;
   color: var(--brand-dark);
@@ -546,6 +553,35 @@ button { font-family: inherit; }
 .note {
   font-size: 14px;
   color: var(--text-muted);
+}
+
+.note--strong {
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+/* ---------- No answer (error) ---------- */
+
+.error-card {
+  gap: 12px;
+  border: 1.5px solid var(--brand);
+}
+
+.error-card__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.error-card__title:focus { outline: none; }
+
+.error-card__body {
+  margin: 0 0 6px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-strong);
 }
 
 .legend {
@@ -821,6 +857,7 @@ button { font-family: inherit; }
   .site-main,
   .site-main--start,
   .site-main--loading,
+  .site-main--error,
   .site-main--verdict { padding: 28px 16px; }
   .logo { font-size: 28px; }
   .logo__glasses { width: 36px; height: 21px; }
