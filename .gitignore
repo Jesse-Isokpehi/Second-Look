@@ -1,0 +1,7 @@
+# Secrets: your API key lives here and must never be committed
+.env
+
+# Editor settings
+.idea/
+
+node_modules/
