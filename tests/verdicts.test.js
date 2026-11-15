@@ -38,6 +38,23 @@ test('parseVerdict: an UNCLEAR verdict is never shown above Low confidence', () 
   assert.ok(result.confidence < 40);
 });
 
+test('parseVerdict keeps at most 3 reasons', () => {
+  const result = parseVerdict({ verdict: 'TRUE', confidence: 80, reasons: ['1', '2', '3', '4', '5'] });
+  assert.deepEqual(result.reasons, ['1', '2', '3']);
+  assert.equal(result.malformed, false);
+});
+
+test('parseVerdict labels a normal reply as written by the AI with no sources', () => {
+  const result = parseVerdict({ verdict: 'TRUE', confidence: 80, reasons: ['x'] });
+  assert.equal(result.note, 'Written by the AI · no sources yet');
+});
+
+test('demo data: no prepared answer has more than 3 reasons', () => {
+  for (const entry of demoData.claims.concat(demoData.fallback)) {
+    assert.ok(entry.reasons.length <= 3, entry.claim || 'fallback');
+  }
+});
+
 test('parseVerdict fills in a line when no reasons are given', () => {
   const result = parseVerdict({ verdict: 'TRUE', confidence: 80 });
   assert.equal(result.malformed, false);

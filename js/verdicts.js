@@ -25,7 +25,9 @@
   var VERDICTS = ['TRUE', 'FALSE', 'UNCLEAR'];
   var MIN_LOADING_MS = 1200; // keep the loading state visible long enough to read
 
-  var AI_NOTE = 'Explanation written by the AI. It does not cite sources yet.';
+  var MAX_REASONS = 3;
+
+  var AI_NOTE = 'Written by the AI · no sources yet';
   var MALFORMED_NOTE = 'The AI’s reply could not be read, so this is shown as UNCLEAR with low confidence.';
 
   function levelFor(confidence) {
@@ -86,7 +88,7 @@
     }
 
     var reasons = Array.isArray(data.reasons)
-      ? data.reasons.filter(function (r) { return typeof r === 'string' && r.trim(); }).slice(0, 5)
+      ? data.reasons.filter(function (r) { return typeof r === 'string' && r.trim(); }).slice(0, MAX_REASONS)
       : [];
     if (!reasons.length) reasons = ['The AI did not give its reasoning for this answer.'];
 
@@ -185,6 +187,7 @@
   return {
     HIGH_FROM: HIGH_FROM,
     MEDIUM_FROM: MEDIUM_FROM,
+    MAX_REASONS: MAX_REASONS,
     levelFor: levelFor,
     parseVerdict: parseVerdict,
     matchDemo: matchDemo,
