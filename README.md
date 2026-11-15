@@ -25,8 +25,34 @@ Needs [Node.js](https://nodejs.org) 20 or newer. Nothing else to install.
 npm test
 ```
 
-The tests cover the escalation rule and session log (`tests/reliance.test.js`) and the handling of
-AI replies and demo answers (`tests/verdicts.test.js`).
+The tests cover the escalation rule, pause switch and session log (`tests/reliance.test.js`), the
+handling of AI replies and demo answers (`tests/verdicts.test.js`), the hedge wording
+(`tests/hedges.test.js`) and the prompt-test scoring (`tests/prompt-scoring.test.js`).
+
+## Test the system prompt
+
+The system prompt sent to the live AI is in `prompts/verdict-prompt.js`. To check it, a script sends
+12 claims with known answers (`tests/prompt-cases.json`) to the Anthropic API and scores each reply
+against the five criteria in `docs/prompt-criteria.md`. Every run adds a row to `docs/prompt-log.md`.
+
+It needs an Anthropic API key, and each run makes 12 small paid API calls. Without a key it prints
+"Skipped" and does nothing.
+
+Windows (PowerShell):
+
+```powershell
+$env:ANTHROPIC_API_KEY = "your-key-here"
+npm run prompt-tests -- --change "what you changed in the prompt"
+```
+
+macOS / Linux:
+
+```bash
+ANTHROPIC_API_KEY="your-key-here" npm run prompt-tests -- --change "what you changed in the prompt"
+```
+
+The loop: change the prompt, bump `PROMPT_VERSION`, run the script, read the new row in the log.
+Never commit the key or paste it into a file in this repo.
 
 ## Demo mode and live mode
 
@@ -52,7 +78,8 @@ visible to anyone who opens the page.
 
 1. **Start** – paste a claim or pick an example.
 2. **Loading** – claim locked and buttons disabled while the AI responds. Can be cancelled.
-3. **Verdict** – verdict, confidence as word + number + bar, then Agree / Disagree.
+3. **Verdict** – a first-person hedge sentence, the verdict, confidence as word + number + bar,
+   then Agree / Disagree. The hedge is picked at random from 3 wordings per confidence level.
 4. **"Why?" open** – the AI's reasoning, shown only when asked for.
 5. **Second-look prompt** – the AI's answer is hidden until you make your own call.
 6. **Your call vs the AI** – both answers side by side. No right/wrong is shown.
@@ -68,6 +95,9 @@ All of these must be true (`js/reliance.js`):
 - the next verdict is Medium or Low confidence
 
 Opening "Why?", disagreeing, or a slow agree resets the streak.
+
+"Pause second-look prompts" (in the header, and under "Why am I seeing this?") switches the prompt
+off until it is resumed or a new session starts. Decisions made while paused are marked in the log.
 
 To see it quickly: agree fast with five High-confidence claims (Ronaldo, Hal Jordan, Great Wall,
 10% of our brains, bats are blind), then check "The Eiffel Tower grows taller in summer".
@@ -88,10 +118,15 @@ To see it quickly: agree fast with five High-confidence claims (Ronaldo, Hal Jor
 | `css/styles.css` | Design tokens (colours, radii, type) and component styles |
 | `js/config.js` | Settings: API URL, timeout, claim length limit |
 | `js/verdicts.js` | Gets a verdict (demo file or live API) and validates the reply |
-| `js/reliance.js` | Behaviour tracker, escalation rule, CSV export. Pure logic |
+| `js/reliance.js` | Behaviour tracker, escalation rule, pause switch, CSV export. Pure logic |
+| `js/hedges.js` | Hedge wording shown above the verdict. Pure logic |
 | `js/app.js` | Screens and interaction |
 | `data/demo-responses.json` | Pre-written answers for demo mode |
-| `tests/` | Unit tests |
-| `CLAUDE.md` | Design and screen notes for working on the project |
+| `prompts/verdict-prompt.js` | System prompt for the live AI, with a version number |
+| `tests/` | Unit tests, plus `prompt-cases.json` for the prompt tests |
+| `scripts/run-prompt-tests.js` | Runs the prompt cases against the live API and logs the score |
+| `docs/prompt-criteria.md` | The five success criteria for the prompt |
+| `docs/prompt-log.md` | One row per prompt test run |
+| `Vivid Description.md` | Design and screen notes for working on the project |
 
 The session log is kept in memory for one session only. Nothing is stored or sent anywhere.
