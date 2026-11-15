@@ -201,6 +201,12 @@ button { font-family: inherit; }
 
 .btn--wide { padding-left: 28px; padding-right: 28px; }
 
+.btn--small {
+  font-size: 14px;
+  padding: 10px 16px;
+  min-height: 44px;
+}
+
 .btn:disabled,
 .btn:disabled:hover {
   cursor: not-allowed;
@@ -483,6 +489,19 @@ button { font-family: inherit; }
   gap: 4px;
 }
 
+.hedge {
+  margin: 2px 0 4px;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.hedge--small {
+  margin: 0;
+  font-size: 15px;
+}
+
 .verdict-word:focus { outline: none; }
 
 .verdict-word {
@@ -695,6 +714,13 @@ button { font-family: inherit; }
 .guess__question {
   font-size: 15px;
   font-weight: 600;
+}
+
+.trigger-info__pause {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
 
 .trigger-info {

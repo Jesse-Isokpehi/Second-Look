@@ -10,6 +10,7 @@
   'use strict';
 
   var verdicts = SL.verdicts;
+  var hedges = SL.hedges;
   var config = window.SECOND_LOOK_CONFIG;
   var tracker = SL.reliance.createTracker();
 
@@ -31,6 +32,7 @@
   var countEl = document.getElementById('claims-count');
   var endSessionEl = document.getElementById('end-session');
   var demoBadgeEl = document.getElementById('demo-badge');
+  var pauseEl = document.getElementById('pause-toggle');
   var announcerEl = document.getElementById('announcer');
 
   var state = freshState();
@@ -44,6 +46,7 @@
       claim: '',
       errorKind: '',
       result: null,
+      hedge: null,        // { id, text } wording shown above the verdict
       whyOpen: false,
       whyOpened: false,
       shownAt: 0,
@@ -67,11 +70,13 @@
     return '“' + esc(claim) + '”';
   }
 
-  /** Headline wording for the verdict screen. */
-  function verdictPhrase(result) {
-    if (result.verdict === 'UNCLEAR') return 'UNCLEAR';
-    var lead = { High: 'Likely', Medium: 'Probably', Low: 'Possibly' }[result.level];
-    return lead + ' ' + result.verdict;
+  function hedgeLine(extraClass) {
+    if (!state.hedge) return '';
+    return '<p class="hedge' + (extraClass ? ' ' + extraClass : '') + '">' + esc(state.hedge.text) + '</p>';
+  }
+
+  function pauseLabel() {
+    return tracker.isPaused() ? 'Resume second-look prompts' : 'Pause second-look prompts';
   }
 
   function badge(result, extraClass) {
@@ -128,11 +133,11 @@
     return '<div class="column column--start">' +
       '<div class="intro">' +
         '<span class="pill">Have a second look</span>' +
-        '<h1 class="title">Seen a claim online? Check it here.</h1>' +
+        '<h1 class="title">Seen a claim or an AI answer? Check it here.</h1>' +
         '<p class="lede">Paste it below. The AI will tell you what it thinks and how sure it is. The final call is yours.</p>' +
       '</div>' +
       '<form class="card card--raised claim-form" data-form="claim" novalidate>' +
-        '<label class="field-label" for="claim">Claim to check</label>' +
+        '<label class="field-label" for="claim">Claim or AI answer to check</label>' +
         '<textarea class="claim-input" id="claim" name="claim" rows="4" maxlength="' + MAX_LENGTH + '"' +
           ' aria-describedby="claim-hint claim-length"' +
           ' placeholder="e.g. “Cristiano Ronaldo has 6 Ballon d’Ors”">' +
@@ -198,7 +203,8 @@
         '<div class="verdict-head">' +
           '<div class="verdict-head__label">' +
             '<span class="eyebrow">The AI\'s verdict</span>' +
-            '<h1 class="verdict-word" tabindex="-1"' + (open ? '' : ' data-focus') + '>' + verdictPhrase(result) + '</h1>' +
+            hedgeLine() +
+            '<h1 class="verdict-word" tabindex="-1"' + (open ? '' : ' data-focus') + '>' + result.verdict + '</h1>' +
           '</div>' +
           badge(result) +
         '</div>' +
@@ -261,6 +267,12 @@
           ' seconds, without opening “Why?”. When that happens and the AI is not highly confident about the next claim, ' +
           'Second Look asks for your view first so you can compare.' +
         '</p>' +
+        '<div class="trigger-info__pause" id="trigger-pause"' + (state.triggerInfoOpen ? '' : ' hidden') + '>' +
+          '<button type="button" class="btn btn--soft btn--small" data-action="toggle-pause">' + pauseLabel() + '</button>' +
+          '<span class="hint">' + (tracker.isPaused()
+            ? 'Paused. You won’t be asked again until you resume. This claim still needs your call.'
+            : 'Pausing starts with the next claim. This one still needs your call.') + '</span>' +
+        '</div>' +
       '</div>' +
     '</div>';
   }
@@ -301,6 +313,7 @@
         '</div>' +
         '<div class="card compare__card">' +
           '<span class="eyebrow">The AI\'s verdict</span>' +
+          hedgeLine('hedge--small') +
           '<span class="compare__value">' + result.verdict + '</span>' +
           badge(result, 'badge--small badge--start') +
         '</div>' +
@@ -358,6 +371,10 @@
         stat(stats.whyOpened, 'Opened “Why?”') +
         stat(stats.escalated, 'Second-look prompts', true) +
       '</dl>' +
+      (stats.whilePaused
+        ? '<p class="note">Second-look prompts were paused for ' + stats.whilePaused + ' of ' + stats.checked +
+          ' decision' + (stats.checked === 1 ? '' : 's') + '.</p>'
+        : '') +
       '<div class="table-wrap" tabindex="0" role="region" aria-label="Session log">' +
         '<table class="log-table">' +
           '<thead><tr>' +
@@ -462,6 +479,8 @@
 
     footerEl.textContent = view === 'summary' ? FOOTER_SUMMARY : FOOTER_DEFAULT;
     endSessionEl.hidden = view === 'summary';
+    pauseEl.hidden = view === 'summary';
+    pauseEl.textContent = pauseLabel();
     demoBadgeEl.hidden = !demoMode;
     document.title = TITLES[view];
 
@@ -495,7 +514,7 @@
   function askAbout(claim) {
     cancelPending();
     go('loading', {
-      claim: claim, draft: '', errorKind: '', result: null, entry: null,
+      claim: claim, draft: '', errorKind: '', result: null, hedge: null, entry: null,
       whyOpen: false, whyOpened: false, escalated: false, triggerInfoOpen: false
     });
     announce('Taking a look. The AI is weighing up this claim.');
@@ -512,7 +531,9 @@
       if (pending !== request) return; // cancelled or superseded
       pending = null;
       var escalated = tracker.beginClaim(result.level);
-      go(escalated ? 'guess' : 'verdict', { result: result, escalated: escalated, shownAt: Date.now() });
+      // No hedge for an unreadable reply: the AI did not say anything we can put into words.
+      var hedge = result.malformed ? null : hedges.pickHedge(result.level, result.verdict);
+      go(escalated ? 'guess' : 'verdict', { result: result, hedge: hedge, escalated: escalated, shownAt: Date.now() });
     }, function (error) {
       if (pending !== request) return;
       pending = null;
@@ -528,7 +549,7 @@
   }
 
   function backToStart(draft, message) {
-    go('start', { draft: draft || '', claim: '', result: null, whyOpen: false, entry: null }, { focus: '#claim' });
+    go('start', { draft: draft || '', claim: '', result: null, hedge: null, whyOpen: false, entry: null }, { focus: '#claim' });
     if (message) announce(message);
   }
 
@@ -541,6 +562,7 @@
       verdict: result.verdict,
       confidence: result.confidence,
       level: result.level,
+      hedgeVariant: state.hedge ? state.hedge.id : '',
       choice: choice,
       ownCall: ownCall,
       whyOpened: state.whyOpened,
@@ -602,6 +624,18 @@
       render({ focus: '[data-action="toggle-trigger-info"]' });
     },
 
+    'toggle-pause': function (el) {
+      tracker.setPaused(!tracker.isPaused());
+      announce(tracker.isPaused() ? 'Second-look prompts paused.' : 'Second-look prompts resumed.');
+      if (mainEl.contains(el)) {
+        render({ focus: '#main [data-action="toggle-pause"]' });
+      } else {
+        // Header button: keep focus where it is, and refresh the panel copy if it is on screen.
+        pauseEl.textContent = pauseLabel();
+        if (state.view === 'guess') render({ keepFocus: true });
+      }
+    },
+
     'next-claim': function () { backToStart(''); },
 
     'end-session': function () {
@@ -631,14 +665,18 @@
 
   // ---------- wiring ----------
 
-  /** The second click of a double-click lands on the next screen; ignore it. */
+  /**
+   * The second click of a double-click lands on the next screen; ignore it.
+   * Only applies inside <main>: header buttons stay in the same place on every screen.
+   */
   function tooSoon() {
     return Date.now() - screenChangedAt < DOUBLE_CLICK_MS;
   }
 
   document.addEventListener('click', function (event) {
     var el = event.target.closest('[data-action]');
-    if (!el || el.disabled || tooSoon()) return;
+    if (!el || el.disabled) return;
+    if (mainEl.contains(el) && tooSoon()) return;
     var handler = actions[el.dataset.action];
     if (handler) handler(el);
   });
