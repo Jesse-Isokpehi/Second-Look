@@ -6,10 +6,10 @@
  * in docs/prompt-criteria.md, and appends one row to docs/prompt-log.md.
  *
  * Usage:
- *   ANTHROPIC_API_KEY=... node scripts/run-prompt-tests.js --change "what you changed in the prompt"
+ *   npm run prompt-tests -- --change "what you changed in the prompt"
  *
- * Without ANTHROPIC_API_KEY it prints a message and exits without calling anything.
- * Optional: SECOND_LOOK_MODEL to pick the model.
+ * Reads ANTHROPIC_API_KEY and MODEL from the .env file (see .env.example).
+ * Without a key it prints a message and exits without calling anything.
  *
  * scoreReply and summarise are pure and unit tested (tests/prompt-scoring.test.js).
  */
@@ -17,6 +17,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { loadEnv } = require('./load-env.js');
 
 const ROOT = path.join(__dirname, '..');
 const CASES_FILE = path.join(ROOT, 'tests', 'prompt-cases.json');
@@ -201,15 +202,16 @@ function readChangeArg(argv) {
 }
 
 async function main() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  loadEnv();
+  const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!apiKey) {
     console.log('Skipped: ANTHROPIC_API_KEY is not set, so no cases were sent and nothing was logged.');
-    console.log('Set the key in your terminal, then run: npm run prompt-tests');
+    console.log('Copy .env.example to .env, put your key in it, then run: npm run prompt-tests');
     return;
   }
 
   const prompt = require(path.join(ROOT, 'prompts', 'verdict-prompt.js'));
-  const model = process.env.SECOND_LOOK_MODEL || DEFAULT_MODEL;
+  const model = process.env.MODEL || DEFAULT_MODEL;
   const cases = JSON.parse(fs.readFileSync(CASES_FILE, 'utf8')).cases;
 
   console.log('Prompt ' + prompt.PROMPT_VERSION + ' · model ' + model + ' · ' + cases.length + ' cases');
