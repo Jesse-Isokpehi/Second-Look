@@ -1,0 +1,3 @@
+15 Nov: First prompt-test run scored 41/49; the two failures were network errors (fetch failed), not model errors. Reran the same v1 prompt: 49/49. Recorded both runs in prompt-log.md rather than deleting the failed one.
+
+15 Nov: A perfect score showed the test set was too easy: confidence clustered at 92–99 on well-known myths. Because the second-look prompt only triggers on Medium/Low verdicts, this means it would rarely fire on typical claims. Added harder cases with expected confidence bands before touching the prompt.
