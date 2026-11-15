@@ -15,9 +15,12 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadEnv } = require('./scripts/load-env.js');
-const prompt = require('./prompts/verdict-prompt.js');
+const { loadPrompt, buildUserMessage } = require('./prompts/verdict-prompt.js');
 
 loadEnv();
+
+// Highest prompts/system-vN.txt, unless PROMPT_VERSION in .env names another.
+const prompt = loadPrompt(process.env.PROMPT_VERSION);
 
 const ROOT = __dirname;
 const HOST = '127.0.0.1'; // this computer only
@@ -106,8 +109,8 @@ async function askModelOnce(claim) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: prompt.SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: prompt.buildUserMessage(claim) }]
+        system: prompt.text,
+        messages: [{ role: 'user', content: buildUserMessage(claim) }]
       }),
       signal: controller.signal
     });
@@ -161,7 +164,7 @@ async function handleCheck(req, res) {
 const server = http.createServer((req, res) => {
   const route = req.url.split('?')[0];
   if (route === '/api/config' && req.method === 'GET') {
-    return sendJSON(res, 200, { live: !!API_KEY, promptVersion: prompt.PROMPT_VERSION });
+    return sendJSON(res, 200, { live: !!API_KEY, promptVersion: prompt.version });
   }
   if (route === '/api/check' && req.method === 'POST') {
     return handleCheck(req, res).catch(() => sendJSON(res, 500, { error: 'server-error' }));
@@ -173,7 +176,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log('Second Look is running at http://localhost:' + server.address().port);
   console.log(API_KEY
-    ? 'Live mode: claims are checked by ' + MODEL + ' (prompt ' + prompt.PROMPT_VERSION + ').'
+    ? 'Live mode: claims are checked by ' + MODEL + ' (prompt ' + prompt.version + ').'
     : 'Demo mode: no ANTHROPIC_API_KEY found in .env, so answers are simulated.');
   console.log('Press Ctrl+C to stop.');
 });

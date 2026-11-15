@@ -27,7 +27,7 @@ function startServer(env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [SERVER], {
       // PORT=0 asks for any free port; an empty key overrides whatever is in a local .env.
-      env: Object.assign({}, process.env, { PORT: '0', ANTHROPIC_API_KEY: '' }, env),
+      env: Object.assign({}, process.env, { PORT: '0', ANTHROPIC_API_KEY: '', PROMPT_VERSION: 'v1' }, env),
       stdio: ['ignore', 'pipe', 'pipe']
     });
     let output = '';
@@ -80,7 +80,7 @@ test('never serves private files such as .env, .git or the server itself', async
   t.after(() => app.child.kill());
 
   for (const file of ['/.env', '/.env.example', '/.git/config', '/server.js', '/package.json',
-    '/prompts/verdict-prompt.js', '/tests/prompt-cases.json', '/js/../.env', '/js/%2e%2e/server.js']) {
+    '/prompts/verdict-prompt.js', '/prompts/system-v1.txt', '/tests/prompt-cases.json', '/js/../.env', '/js/%2e%2e/server.js']) {
     assert.equal((await fetch(app.url + file)).status, 404, file);
   }
 });

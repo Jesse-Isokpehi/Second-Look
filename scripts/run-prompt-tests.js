@@ -2,7 +2,7 @@
 /* Second Look — prompt-testing loop.
  *
  * Sends every case in tests/prompt-cases.json to the live AI using the system
- * prompt in prompts/verdict-prompt.js, scores each reply against the criteria
+ * prompt in prompts/system-vN.txt (the highest N, or --prompt v1 to pick one), scores each reply against the criteria
  * in docs/prompt-criteria.md, and appends one row to docs/prompt-log.md.
  *
  * Usage:
@@ -18,6 +18,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadEnv } = require('./load-env.js');
+const { loadPrompt, buildUserMessage } = require('../prompts/verdict-prompt.js');
 
 const ROOT = path.join(__dirname, '..');
 const CASES_FILE = path.join(ROOT, 'tests', 'prompt-cases.json');
@@ -147,8 +148,8 @@ async function askModelOnce(claim, apiKey, model, prompt) {
       body: JSON.stringify({
         model: model,
         max_tokens: MAX_TOKENS,
-        system: prompt.SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: prompt.buildUserMessage(claim) }]
+        system: prompt.text,
+        messages: [{ role: 'user', content: buildUserMessage(claim) }]
       }),
       signal: controller.signal
     });
@@ -211,9 +212,10 @@ function appendLog(row) {
   fs.appendFileSync(LOG_FILE, '| ' + cells.join(' | ') + ' |\n');
 }
 
-function readChangeArg(argv) {
-  const index = argv.indexOf('--change');
-  return index !== -1 && argv[index + 1] ? argv[index + 1] : 'Baseline (no change)';
+/** The value after a flag, e.g. readArg(argv, '--change'). */
+function readArg(argv, flag) {
+  const index = argv.indexOf(flag);
+  return index !== -1 && argv[index + 1] !== undefined ? argv[index + 1] : null;
 }
 
 async function main() {
@@ -225,11 +227,11 @@ async function main() {
     return;
   }
 
-  const prompt = require(path.join(ROOT, 'prompts', 'verdict-prompt.js'));
+  const prompt = loadPrompt(readArg(process.argv, '--prompt') || process.env.PROMPT_VERSION);
   const model = process.env.MODEL || DEFAULT_MODEL;
   const cases = JSON.parse(fs.readFileSync(CASES_FILE, 'utf8')).cases;
 
-  console.log('Prompt ' + prompt.PROMPT_VERSION + ' · model ' + model + ' · ' + cases.length + ' cases');
+  console.log('Prompt ' + prompt.version + ' (' + path.basename(prompt.file) + ') · model ' + model + ' · ' + cases.length + ' cases');
 
   const results = [];
   let failedCalls = 0;
@@ -258,9 +260,9 @@ async function main() {
 
   appendLog({
     date: new Date().toISOString().slice(0, 10),
-    version: prompt.PROMPT_VERSION,
+    version: prompt.version,
     model: model,
-    change: readChangeArg(process.argv),
+    change: readArg(process.argv, '--change') || 'No change noted',
     summary: summary
   });
   console.log('\nRow added to docs/prompt-log.md');
