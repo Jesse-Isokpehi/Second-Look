@@ -7,6 +7,8 @@ hides the AI's answer and asks for their own call first.
 ## Project layout
 
 - Plain HTML, CSS and JavaScript. No framework, no build step, no runtime dependencies.
+- `server.js` – local server for `npm start`. Serves the page and calls the AI, so the API key
+  (in the git-ignored `.env`) never reaches the browser. No key means demo mode.
 - `index.html` – page shell (header, main, footer). Screens are rendered into `<main>`.
 - `css/styles.css` – design tokens as CSS variables at the top, then component styles.
 - `js/config.js` – settings (API URL, timeout, claim length limit).
@@ -28,7 +30,7 @@ hides the AI's answer and asks for their own call first.
 - Colours, radii and fonts come from the CSS variables in `styles.css`; do not hard-code new ones.
 - Anything the user types is escaped with `esc()` before it goes into HTML.
 - Every control is a real `<button>`, `<textarea>` or `<label>`. No click handlers on divs.
-- Never put an API key in front-end code.
+- Never put an API key in front-end code or commit one. It lives only in `.env`.
 
 ## Visual design
 

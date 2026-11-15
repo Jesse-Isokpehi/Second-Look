@@ -5,17 +5,25 @@ If you start agreeing quickly without looking closer, Second Look asks for your 
 
 ## Run it
 
-There is nothing to install or build, but the page must be opened through a local server
-(double-clicking `index.html` will not load the demo answers).
+Needs [Node.js](https://nodejs.org) 20 or newer. Nothing else to install.
 
-- **PyCharm:** right-click `index.html` → Open In → Browser.
-- **Terminal:**
+```bash
+npm start
+```
 
-  ```bash
-  python -m http.server 8000
-  ```
+Then visit <http://localhost:8000>. Press Ctrl+C in the terminal to stop.
 
-  Then visit <http://localhost:8000>.
+Without an API key the app runs in **demo mode** with simulated answers. To use the real AI:
+
+1. Copy `.env.example` to a new file called `.env`.
+2. In `.env`, put your Anthropic API key after `ANTHROPIC_API_KEY=` (no quotes, no spaces).
+3. Run `npm start` again. The "Demo mode" label disappears.
+
+`.env` is ignored by git, so the key is never committed. The key stays on the local server
+(`server.js`); it is never sent to the browser.
+
+You can also open `index.html` without Node (PyCharm: right-click → Open In → Browser). That
+always runs in demo mode. Double-clicking the file in a folder will not load the demo answers.
 
 ## Run the tests
 
@@ -27,7 +35,8 @@ npm test
 
 The tests cover the escalation rule, pause switch and session log (`tests/reliance.test.js`), the
 handling of AI replies and demo answers (`tests/verdicts.test.js`), the hedge wording
-(`tests/hedges.test.js`) and the prompt-test scoring (`tests/prompt-scoring.test.js`).
+(`tests/hedges.test.js`), the prompt-test scoring (`tests/prompt-scoring.test.js`) and the local
+server (`tests/server.test.js`, using a stand-in for the AI, so no key is needed).
 
 ## Test the system prompt
 
@@ -35,24 +44,15 @@ The system prompt sent to the live AI is in `prompts/verdict-prompt.js`. To chec
 12 claims with known answers (`tests/prompt-cases.json`) to the Anthropic API and scores each reply
 against the five criteria in `docs/prompt-criteria.md`. Every run adds a row to `docs/prompt-log.md`.
 
-It needs an Anthropic API key, and each run makes 12 small paid API calls. Without a key it prints
-"Skipped" and does nothing.
+It reads the key and model from `.env` (see "Run it" above), and each run makes 12 small paid API
+calls. Without a key it prints "Skipped" and does nothing.
 
-Windows (PowerShell):
-
-```powershell
-$env:ANTHROPIC_API_KEY = "your-key-here"
+```bash
 npm run prompt-tests -- --change "what you changed in the prompt"
 ```
 
-macOS / Linux:
-
-```bash
-ANTHROPIC_API_KEY="your-key-here" npm run prompt-tests -- --change "what you changed in the prompt"
-```
-
 The loop: change the prompt, bump `PROMPT_VERSION`, run the script, read the new row in the log.
-Never commit the key or paste it into a file in this repo.
+Never put the key anywhere except `.env`.
 
 ## Demo mode and live mode
 
@@ -64,15 +64,9 @@ Claims with a prepared answer: Ronaldo's Ballon d'Ors, Hal Jordan, the Eiffel To
 cracking knuckles, lightning striking twice, the Great Wall from space, using 10% of our brains,
 bats being blind, bulls and the colour red, goldfish memory, and coffee and growth.
 
-**Live mode** is used when `apiUrl` is set in `js/config.js`. The claim is POSTed to that URL as
-`{ "claim": "..." }` and the reply should be JSON:
-
-```json
-{ "verdict": "FALSE", "confidence": 88, "reasons": ["...", "..."] }
-```
-
-This repo does not include that server. Do not put an API key in `js/config.js`: it would be
-visible to anyone who opens the page.
+**Live mode** is used when the app is started with `npm start` and `.env` contains a key. The page
+sends the claim to the local server, which adds the system prompt (`prompts/verdict-prompt.js`) and
+asks the model named by `MODEL` in `.env`. The reply is validated in the page before it is shown.
 
 ## Screens
 
@@ -116,7 +110,9 @@ To see it quickly: agree fast with five High-confidence claims (Ronaldo, Hal Jor
 | --- | --- |
 | `index.html` | Page shell: header, main area, footer |
 | `css/styles.css` | Design tokens (colours, radii, type) and component styles |
-| `js/config.js` | Settings: API URL, timeout, claim length limit |
+| `server.js` | Local server for `npm start`: serves the page and calls the AI with the key from `.env` |
+| `.env.example` | Template for `.env`, where your API key goes |
+| `js/config.js` | Settings: timeout, claim length limit, server addresses |
 | `js/verdicts.js` | Gets a verdict (demo file or live API) and validates the reply |
 | `js/reliance.js` | Behaviour tracker, escalation rule, pause switch, CSV export. Pure logic |
 | `js/hedges.js` | Hedge wording shown above the verdict. Pure logic |
@@ -125,6 +121,7 @@ To see it quickly: agree fast with five High-confidence claims (Ronaldo, Hal Jor
 | `prompts/verdict-prompt.js` | System prompt for the live AI, with a version number |
 | `tests/` | Unit tests, plus `prompt-cases.json` for the prompt tests |
 | `scripts/run-prompt-tests.js` | Runs the prompt cases against the live API and logs the score |
+| `scripts/load-env.js` | Reads `.env` for the server and the prompt tests |
 | `docs/prompt-criteria.md` | The five success criteria for the prompt |
 | `docs/prompt-log.md` | One row per prompt test run |
 | `Vivid Description.md` | Design and screen notes for working on the project |
