@@ -5,6 +5,7 @@
   "description": "Check a claim you saw online. The AI says what it thinks and how sure it is; the final call is yours.",
   "license": "MIT",
   "scripts": {
+    "start": "node server.js",
     "test": "node --test",
     "prompt-tests": "node scripts/run-prompt-tests.js"
   }

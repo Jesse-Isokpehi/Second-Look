@@ -704,4 +704,18 @@
   });
 
   render({ keepFocus: true });
+
+  // When the page is served by `npm start` and a key is set, the server offers live mode.
+  // Any other way of opening the page (PyCharm's browser button, a static server) stays in demo mode.
+  if (!config.apiUrl && config.serverConfigUrl) {
+    fetch(config.serverConfigUrl).then(function (response) {
+      return response.ok ? response.json() : null;
+    }).then(function (server) {
+      if (server && server.live === true) {
+        config.apiUrl = config.serverCheckUrl;
+        demoMode = false;
+        demoBadgeEl.hidden = true;
+      }
+    }).catch(function () { /* no server: stay in demo mode */ });
+  }
 })(window.SecondLook = window.SecondLook || {});
