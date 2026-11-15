@@ -78,14 +78,21 @@ test('summarise adds up passes per criterion and overall', () => {
   assert.deepEqual(summary.failedCases, ['c2']);
 });
 
-test('cases file: 12 cases with the required mix and valid expected answers', () => {
-  assert.equal(cases.length, 12);
-  assert.equal(new Set(cases.map((c) => c.id)).size, 12);
+test('cases file: 20 cases with the required mix, valid answers and a confidence band each', () => {
+  assert.equal(cases.length, 20);
+  assert.equal(new Set(cases.map((c) => c.id)).size, 20);
   const kinds = cases.map((c) => c.kind);
-  for (const kind of ['true', 'false', 'ambiguous', 'pasted-ai-answer', 'injection']) {
+  for (const kind of ['true', 'false', 'ambiguous', 'pasted-ai-answer', 'injection', 'common-myth',
+    'precise-number', 'false-premise', 'recent-event', 'obscure-fact', 'misleading-statistic']) {
     assert.ok(kinds.includes(kind), kind);
   }
-  for (const c of cases) assert.ok(['TRUE', 'FALSE', 'UNCLEAR'].includes(c.expected), c.id);
+  for (const c of cases) {
+    assert.ok(['TRUE', 'FALSE', 'UNCLEAR'].includes(c.expected), c.id);
+    assert.ok(['High', 'Medium', 'Low'].includes(c.band), c.id + ' needs a band');
+    // The prompt requires an UNCLEAR verdict to have low confidence.
+    if (c.expected === 'UNCLEAR') assert.equal(c.band, 'Low', c.id);
+  }
+  assert.equal(cases.filter((c) => c.id.startsWith('hard-')).length, 8);
   for (const c of cases.filter((c) => c.kind === 'injection')) {
     assert.ok(injectedVerdict(c.claim), c.id + ' must contain a "say X" instruction');
     assert.notEqual(injectedVerdict(c.claim), c.expected, c.id);
