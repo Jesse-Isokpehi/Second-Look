@@ -40,18 +40,29 @@ server (`tests/server.test.js`, using a stand-in for the AI, so no key is needed
 
 ## Test the system prompt
 
-The system prompt sent to the live AI is in `prompts/verdict-prompt.js`. To check it, a script sends
-12 claims with known answers (`tests/prompt-cases.json`) to the Anthropic API and scores each reply
-against the five criteria in `docs/prompt-criteria.md`. Every run adds a row to `docs/prompt-log.md`.
+The system prompt sent to the live AI is a plain text file, `prompts/system-v1.txt`. A script sends
+20 claims with known answers (`tests/prompt-cases.json`) to the Anthropic API and scores each reply
+against the six criteria in `docs/prompt-criteria.md`. Every run adds a row to `docs/prompt-log.md`.
 
-It reads the key and model from `.env` (see "Run it" above), and each run makes 12 small paid API
-calls. Without a key it prints "Skipped" and does nothing.
+It reads the key and model from `.env` (see "Run it" above). Without a key it prints "Skipped" and
+does nothing. Each case is one small paid API call.
 
 ```bash
 npm run prompt-tests -- --change "what you changed in the prompt"
 ```
 
-The loop: change the prompt, bump `PROMPT_VERSION`, run the script, read the new row in the log.
+Run every case 3 times to see how consistent the answers are (60 calls). The report lists the cases
+whose verdict or confidence band changed between runs:
+
+```bash
+npm run prompt-tests -- --repeat 3 --change "what you changed in the prompt"
+```
+
+**To try a new prompt:** copy `prompts/system-v1.txt` to `prompts/system-v2.txt` and edit the copy.
+The highest number is used automatically by the tests and by `npm start`, and the version is
+written to the log. To go back, add `--prompt v1` to the command, or set `PROMPT_VERSION=v1` in
+`.env` for the app.
+
 Never put the key anywhere except `.env`.
 
 ## Demo mode and live mode
@@ -65,7 +76,7 @@ cracking knuckles, lightning striking twice, the Great Wall from space, using 10
 bats being blind, bulls and the colour red, goldfish memory, and coffee and growth.
 
 **Live mode** is used when the app is started with `npm start` and `.env` contains a key. The page
-sends the claim to the local server, which adds the system prompt (`prompts/verdict-prompt.js`) and
+sends the claim to the local server, which adds the system prompt (`prompts/system-v1.txt`) and
 asks the model named by `MODEL` in `.env`. The reply is validated in the page before it is shown.
 
 ## Screens
@@ -123,11 +134,12 @@ shows the shortcut is on. Nothing is added to the session log by the shortcut it
 | `js/hedges.js` | Hedge wording shown above the verdict. Pure logic |
 | `js/app.js` | Screens and interaction |
 | `data/demo-responses.json` | Pre-written answers for demo mode |
-| `prompts/verdict-prompt.js` | System prompt for the live AI, with a version number |
+| `prompts/system-v1.txt` | The system prompt for the live AI. One file per version |
+| `prompts/verdict-prompt.js` | Loads the newest prompt file |
 | `tests/` | Unit tests, plus `prompt-cases.json` for the prompt tests |
 | `scripts/run-prompt-tests.js` | Runs the prompt cases against the live API and logs the score |
 | `scripts/load-env.js` | Reads `.env` for the server and the prompt tests |
-| `docs/prompt-criteria.md` | The five success criteria for the prompt |
+| `docs/prompt-criteria.md` | The six success criteria for the prompt |
 | `docs/prompt-log.md` | One row per prompt test run |
 | `Vivid Description.md` | Design and screen notes for working on the project |
 
