@@ -61,6 +61,15 @@
       return true;
     }
 
+    /**
+     * Demo shortcut (?demoStreak=1): start as if STREAK_LENGTH quick agrees had just
+     * been made, so the next Medium or Low verdict shows the second-look prompt.
+     * Nothing is added to the log.
+     */
+    function primeStreak() {
+      streak = config.STREAK_LENGTH;
+    }
+
     /** The user's "Pause second-look prompts" switch. */
     function setPaused(value) {
       paused = !!value;
@@ -141,6 +150,7 @@
       shouldEscalate: shouldEscalate,
       beginClaim: beginClaim,
       noteWhyOpened: noteWhyOpened,
+      primeStreak: primeStreak,
       setPaused: setPaused,
       isPaused: function () { return paused; },
       record: record,

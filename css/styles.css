@@ -387,6 +387,17 @@ button { font-family: inherit; }
   color: var(--brand-dark);
 }
 
+.shortcut-note {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px 14px;
+  border: 1.5px dashed var(--border-dashed);
+  border-radius: var(--radius-control);
+  color: var(--brand);
+  background: var(--bg);
+}
+
 .examples {
   display: flex;
   flex-direction: column;

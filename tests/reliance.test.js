@@ -243,6 +243,24 @@ test('paused: starts off, and reset turns it off again', () => {
   assert.equal(tracker.isPaused(), false);
 });
 
+test('primeStreak: the next Medium or Low verdict triggers without any logged decisions', () => {
+  const tracker = createTracker();
+  tracker.primeStreak();
+  assert.equal(tracker.streak(), DEFAULTS.STREAK_LENGTH);
+  assert.equal(tracker.entries().length, 0);
+  assert.equal(tracker.beginClaim('High'), false);
+  assert.equal(tracker.beginClaim('Medium'), true);
+  // Used up: it behaves like a normal trigger and resets.
+  assert.equal(tracker.beginClaim('Low'), false);
+});
+
+test('primeStreak still respects the pause switch', () => {
+  const tracker = createTracker();
+  tracker.primeStreak();
+  tracker.setPaused(true);
+  assert.equal(tracker.beginClaim('Low'), false);
+});
+
 test('reset clears the log and the streak', () => {
   const tracker = createTracker();
   quickAgrees(tracker, 5);

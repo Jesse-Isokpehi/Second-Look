@@ -18,6 +18,10 @@
   var DOUBLE_CLICK_MS = 400; // clicks this soon after a screen change are ignored
   var demoMode = !config.apiUrl;
 
+  // Demo shortcut: open the page with ?demoStreak=1 to skip the five quick agrees.
+  var streakShortcut = new URLSearchParams(window.location.search).get('demoStreak') === '1';
+  if (streakShortcut) tracker.primeStreak();
+
   var EXAMPLES = [
     'Hal Jordan is a Marvel character',
     'The Eiffel Tower grows taller in summer',
@@ -148,6 +152,10 @@
           '<button type="submit" class="btn btn--primary btn--wide" id="claim-submit">Take a second look</button>' +
         '</div>' +
       '</form>' +
+      (streakShortcut && tracker.shouldEscalate('Low')
+        ? '<p class="shortcut-note">Shortcut on (?demoStreak=1): the next Medium or Low confidence answer ' +
+          'will show the second-look prompt. Try “The Eiffel Tower grows taller in summer”.</p>'
+        : '') +
       '<div class="examples">' +
         '<span class="field-label" id="examples-label">Not sure what to check? Try one of these</span>' +
         '<div class="chip-row" role="group" aria-labelledby="examples-label">' +
@@ -645,6 +653,7 @@
 
     'new-session': function () {
       tracker.reset();
+      if (streakShortcut) tracker.primeStreak();
       state = freshState();
       go('start', {}, { focus: '#claim' });
       announce('New session started.');

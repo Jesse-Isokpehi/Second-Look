@@ -93,8 +93,13 @@ Opening "Why?", disagreeing, or a slow agree resets the streak.
 "Pause second-look prompts" (in the header, and under "Why am I seeing this?") switches the prompt
 off until it is resumed or a new session starts. Decisions made while paused are marked in the log.
 
-To see it quickly: agree fast with five High-confidence claims (Ronaldo, Hal Jordan, Great Wall,
-10% of our brains, bats are blind), then check "The Eiffel Tower grows taller in summer".
+To see it the real way: agree fast with five High-confidence claims (Ronaldo, Hal Jordan, Great
+Wall, 10% of our brains, bats are blind), then check "The Eiffel Tower grows taller in summer".
+
+**Shortcut for demos and marking:** add `?demoStreak=1` to the address, e.g.
+<http://localhost:8000/?demoStreak=1>. The app then starts as if five quick agrees had already
+happened, so the first Medium or Low answer shows the prompt. A dashed note on the start screen
+shows the shortcut is on. Nothing is added to the session log by the shortcut itself.
 
 ### When things go wrong
 
