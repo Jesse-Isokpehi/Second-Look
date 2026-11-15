@@ -27,6 +27,8 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-5-5';
 const MAX_TOKENS = 500;
 const TIMEOUT_MS = 30000;
+const NETWORK_RETRIES = 2;   // a dropped connection says nothing about the prompt, so try again
+const RETRY_WAIT_MS = 1500;
 
 const ALLOWED_VERDICTS = ['TRUE', 'FALSE', 'UNCLEAR'];
 const MAX_BULLETS = 3;
@@ -118,7 +120,20 @@ function summarise(results) {
 
 // ---------- everything below talks to the network or the disk ----------
 
+/** Ask once more when the connection itself failed. A reply from the service is never retried. */
 async function askModel(claim, apiKey, model, prompt) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await askModelOnce(claim, apiKey, model, prompt);
+    } catch (error) {
+      const networkProblem = !!error.cause || error.name === 'AbortError';
+      if (!networkProblem || attempt >= NETWORK_RETRIES) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_WAIT_MS));
+    }
+  }
+}
+
+async function askModelOnce(claim, apiKey, model, prompt) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -224,7 +239,8 @@ async function main() {
       raw = await askModel(testCase.claim, apiKey, model, prompt);
     } catch (error) {
       failedCalls += 1;
-      console.log('  ' + testCase.id + ': API call failed (' + error.message + ')');
+      const cause = error.cause ? ' – ' + (error.cause.code || error.cause.message) : '';
+      console.log('  ' + testCase.id + ': API call failed (' + error.message + cause + ')');
     }
     results.push(scoreReply(testCase, raw));
   }

@@ -86,7 +86,17 @@ function readBody(req) {
   });
 }
 
+/** One quick second try if the connection itself failed; the page's own timeout leaves no room for more. */
 async function askModel(claim) {
+  try {
+    return await askModelOnce(claim);
+  } catch (error) {
+    if (!error.cause) throw error; // the service replied, or we timed out: do not repeat
+    return askModelOnce(claim);
+  }
+}
+
+async function askModelOnce(claim) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
@@ -102,15 +112,26 @@ async function askModel(claim) {
       signal: controller.signal
     });
     if (!response.ok) {
-      const error = new Error('upstream ' + response.status);
-      error.status = response.status;
-      throw error;
+      // Keep the service's own explanation (e.g. "credit balance is too low") for the terminal.
+      const detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 300);
+      throw new Error('the AI service replied ' + response.status + ' ' + detail);
     }
     const blocks = (await response.json()).content || [];
     return blocks.filter((b) => b.type === 'text').map((b) => b.text).join('');
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** A one-line reason for the terminal. Never includes the key. */
+function describeFailure(error) {
+  if (error.name === 'AbortError') return 'timed out after ' + (UPSTREAM_TIMEOUT_MS / 1000) + ' seconds';
+  if (error.cause) {
+    // "fetch failed" means this computer could not connect at all; the cause says why.
+    const cause = error.cause.code || error.cause.message || String(error.cause);
+    return 'could not connect to the AI service (' + cause + '). Check your internet, VPN, firewall or antivirus.';
+  }
+  return error.message;
 }
 
 async function handleCheck(req, res) {
@@ -132,7 +153,7 @@ async function handleCheck(req, res) {
     res.end(text);
   } catch (error) {
     // Log the reason here; never send upstream details (or the key) to the browser.
-    console.error('AI request failed:', error.name === 'AbortError' ? 'timed out' : error.message);
+    console.error('AI request failed:', describeFailure(error));
     sendJSON(res, error.name === 'AbortError' ? 504 : 502, { error: 'ai-unavailable' });
   }
 }
