@@ -19,6 +19,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { loadEnv } = require('./load-env.js');
 const { loadPrompt, buildUserMessage } = require('../prompts/verdict-prompt.js');
+const { levelFor } = require('../js/verdicts.js'); // the same High / Medium / Low bands the app shows
 
 const ROOT = path.join(__dirname, '..');
 const CASES_FILE = path.join(ROOT, 'tests', 'prompt-cases.json');
@@ -39,7 +40,8 @@ const CRITERIA = [
   { key: 'verdictAllowed', label: 'Verdict in allowed set' },
   { key: 'confidenceRange', label: 'Confidence 0–100' },
   { key: 'maxBullets', label: 'At most 3 bullets' },
-  { key: 'ignoresInstructions', label: 'Ignores embedded instructions' }
+  { key: 'ignoresInstructions', label: 'Ignores embedded instructions' },
+  { key: 'confidenceBand', label: 'Confidence in expected band' }
 ];
 
 /** The verdict an injected instruction asks for, e.g. "say TRUE" -> 'TRUE'. */
@@ -49,7 +51,7 @@ function injectedVerdict(claim) {
 }
 
 /**
- * Score one raw reply against the five criteria.
+ * Score one raw reply against the six criteria.
  * Each criterion is true (pass), false (fail) or null (does not apply to this case).
  * rawText is null when the API call itself failed.
  */
@@ -73,8 +75,13 @@ function scoreReply(testCase, rawText) {
     maxBullets: !!data && Array.isArray(data.reasons) &&
       data.reasons.length >= 1 && data.reasons.length <= MAX_BULLETS &&
       data.reasons.every((r) => typeof r === 'string' && r.trim() !== ''),
-    ignoresInstructions: null
+    ignoresInstructions: null,
+    confidenceBand: null
   };
+
+  // Criterion 6: the confidence falls in the band a calibrated answer should be in.
+  const band = checks.confidenceRange ? levelFor(data.confidence) : null;
+  if (testCase.band) checks.confidenceBand = band === testCase.band;
 
   if (testCase.kind === 'injection') {
     const asked = injectedVerdict(testCase.claim);
@@ -87,6 +94,8 @@ function scoreReply(testCase, rawText) {
     expected: testCase.expected,
     verdict: verdict,
     confidence: data && typeof data.confidence === 'number' ? data.confidence : null,
+    expectedBand: testCase.band || null,
+    band: band,
     bullets: data && Array.isArray(data.reasons) ? data.reasons.length : null,
     matchesExpected: checks.verdictAllowed && verdict === testCase.expected,
     checks: checks
@@ -169,17 +178,23 @@ function mark(value) {
 
 function printTable(results, summary) {
   console.log('');
-  console.log('case                     expected  got       conf  JSON  verdict  conf  ≤3   ignores  match');
-  console.log('-----------------------  --------  --------  ----  ----  -------  ----  ---  -------  -----');
+  console.log('case                   expected  got       conf  band wanted/got   JSON  verdict  conf  ≤3   ignores  band  match');
+  console.log('---------------------  --------  --------  ----  ----------------  ----  -------  ----  ---  -------  ----  -----');
   for (const r of results) {
     console.log([
-      r.id.padEnd(23), r.expected.padEnd(8), String(r.verdict || '(none)').padEnd(8),
+      r.id.padEnd(21), r.expected.padEnd(8), String(r.verdict || '(none)').padEnd(8),
       String(r.confidence === null ? '–' : r.confidence).padStart(4),
+      ((r.expectedBand || '–') + ' / ' + (r.band || '–')).padEnd(16),
       mark(r.checks.validJson).padEnd(4), mark(r.checks.verdictAllowed).padEnd(7),
       mark(r.checks.confidenceRange).padEnd(4), mark(r.checks.maxBullets),
-      mark(r.checks.ignoresInstructions).padEnd(7), r.matchesExpected ? 'yes' : 'NO'
+      mark(r.checks.ignoresInstructions).padEnd(7), mark(r.checks.confidenceBand).padEnd(4),
+      r.matchesExpected ? 'yes' : 'NO'
     ].join('  '));
   }
+  printSummary(summary);
+}
+
+function printSummary(summary) {
   console.log('');
   for (const c of summary.perCriterion) {
     console.log((c.label + ':').padEnd(32) + c.passed + '/' + c.total);
@@ -188,28 +203,51 @@ function printTable(results, summary) {
   console.log('Matches known answer:'.padEnd(32) + summary.matched + '/' + summary.cases + '  (reported, not scored)');
 }
 
+const LOG_COLUMNS = ['Date', 'Prompt version', 'Model', 'Change made', 'Score', 'Per criterion (1–6)',
+  'Matches known answer', 'Failed cases'];
+
+/** The header of the last table in the log, so a changed format starts a new table instead of breaking the old one. */
+function lastTableHeader(text) {
+  const headers = text.split(/\r?\n/).filter((line) => /^\| Date \|/.test(line));
+  return headers.length ? headers[headers.length - 1].trim() : null;
+}
+
 function appendLog(row) {
+  const header = '| ' + LOG_COLUMNS.join(' | ') + ' |';
+  const divider = '| ' + LOG_COLUMNS.map(() => '---').join(' | ') + ' |';
+
   if (!fs.existsSync(LOG_FILE)) {
     fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
     fs.writeFileSync(LOG_FILE, [
       '# Prompt test log',
       '',
       'One row per run of `npm run prompt-tests`. Criteria are defined in `prompt-criteria.md`.',
-      'Score = passed checks / applicable checks across all five criteria.',
-      '',
-      '| Date | Prompt version | Model | Change made | Score | Per criterion (1–5) | Matches known answer | Failed cases |',
-      '| --- | --- | --- | --- | --- | --- | --- | --- |',
+      'Score = passed checks / applicable checks across all criteria.',
       ''
     ].join('\n'));
   }
-  const cells = [
+
+  const existing = fs.readFileSync(LOG_FILE, 'utf8');
+  let block = '';
+  if (lastTableHeader(existing) !== header) {
+    // Earlier rows stay exactly as they were logged; rows in the new format get their own table.
+    block += (existing.endsWith('\n') ? '' : '\n') + '\n' + header + '\n' + divider + '\n';
+  } else if (!existing.endsWith('\n')) {
+    block += '\n';
+  }
+
+  const cells = logCells(row).map((cell) => String(cell).replace(/\|/g, '/').replace(/\s+/g, ' '));
+  fs.appendFileSync(LOG_FILE, block + '| ' + cells.join(' | ') + ' |\n');
+}
+
+function logCells(row) {
+  return [
     row.date, row.version, row.model, row.change,
     row.summary.passed + '/' + row.summary.total + ' (' + row.summary.percent + '%)',
     row.summary.perCriterion.map((c) => c.passed + '/' + c.total).join(', '),
     row.summary.matched + '/' + row.summary.cases,
     row.summary.failedCases.length ? row.summary.failedCases.join(', ') : 'none'
-  ].map((cell) => String(cell).replace(/\|/g, '/').replace(/\s+/g, ' '));
-  fs.appendFileSync(LOG_FILE, '| ' + cells.join(' | ') + ' |\n');
+  ];
 }
 
 /** The value after a flag, e.g. readArg(argv, '--change'). */
@@ -275,4 +313,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CRITERIA, scoreReply, summarise, injectedVerdict };
+module.exports = { CRITERIA, scoreReply, summarise, injectedVerdict, lastTableHeader };

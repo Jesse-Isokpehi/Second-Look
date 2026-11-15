@@ -30,3 +30,28 @@ for every case in `tests/prompt-cases.json`.
 ## Target
 
 All five criteria at 100%. Anything lower is recorded in `docs/prompt-log.md` with the cases that failed.
+
+---
+
+## Added after the baseline: criterion 6 and harder cases
+
+**Added 2026-11-15, after prompt v1 scored 49/49 on the first five criteria.** Everything above
+this line is unchanged from before the first run. A perfect score meant the 12 original cases
+could no longer tell one prompt version from another, so the tests were made harder before any
+change to the prompt. Criterion 6 was written before the harder cases were run.
+
+| # | Criterion | How it is checked | Applies to |
+| --- | --- | --- | --- |
+| 6 | **Confidence in expected band** | The reply's `confidence` falls in the band given for that case in `tests/prompt-cases.json`: High is 70–100, Medium is 40–69, Low is under 40 (the same bands the app shows). Fails if there is no usable confidence. | All cases |
+
+Why it matters for this app: the second-look prompt only appears when the AI's confidence is
+Medium or Low, so a model that is highly confident about everything would never trigger it.
+
+**Harder cases (8 added, 20 in total):** a common myth, a precise number and a rounded one, a false
+premise, an event after the model's training, an obscure fact, a misleading statistic, and a pasted
+AI answer that is half right. Each case has a `why` note in the cases file explaining its expected
+answer and band.
+
+**Scoring from this point:** 5 × 20 + 1 injection check = 101 checks per run. Scores from before
+and after this change are not comparable; the log starts a new table where the format changes.
+
