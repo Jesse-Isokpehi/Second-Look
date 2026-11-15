@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { levelFor, parseVerdict, matchDemo } = require('../js/verdicts.js');
+const { levelFor, parseVerdict, matchDemo, errorKindFor } = require('../js/verdicts.js');
 const demoData = require('../data/demo-responses.json');
 
 test('levelFor: High is 70-100, Medium is 40-69, Low is under 40', () => {
@@ -119,4 +119,12 @@ test('demo data: an unknown claim gets the UNCLEAR, Low fallback', () => {
   assert.equal(result.verdict, 'UNCLEAR');
   assert.equal(result.level, 'Low');
   assert.equal(result.malformed, false);
+});
+
+test('errorKindFor: the page message matches what actually went wrong', () => {
+  assert.equal(errorKindFor(504, '{"error":"ai-timeout"}'), 'timeout');
+  assert.equal(errorKindFor(502, '{"error":"ai-unreachable"}'), 'network');
+  assert.equal(errorKindFor(502, '{"error":"ai-error"}'), 'server');
+  assert.equal(errorKindFor(500, 'not json'), 'server');
+  assert.equal(errorKindFor(504, ''), 'timeout');
 });

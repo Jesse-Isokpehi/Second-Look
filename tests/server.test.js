@@ -121,6 +121,16 @@ test('with a key: rejects an empty or missing claim and cuts a long one to 300 c
   assert.equal(ai.seen[0].body.messages[0].content, '<claim>\n' + 'a'.repeat(300) + '\n</claim>');
 });
 
+test('with a key: a connection that fails is reported as unreachable, not as an AI error', async (t) => {
+  // Nothing listens on port 9, so the connection itself fails ("fetch failed").
+  const app = await startServer({ ANTHROPIC_API_KEY: 'test-key-123', SECOND_LOOK_API_URL: 'http://127.0.0.1:9/v1/messages' });
+  t.after(() => app.child.kill());
+
+  const response = await fetch(app.url + '/api/check', { method: 'POST', body: JSON.stringify({ claim: 'x' }) });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: 'ai-unreachable' });
+});
+
 test('with a key: an AI error becomes a 502 that does not leak the key', async (t) => {
   const ai = await startFakeAI({ status: 401 });
   const app = await startServer({ ANTHROPIC_API_KEY: 'test-key-123', SECOND_LOOK_API_URL: ai.url });
@@ -128,5 +138,5 @@ test('with a key: an AI error becomes a 502 that does not leak the key', async (
 
   const response = await fetch(app.url + '/api/check', { method: 'POST', body: JSON.stringify({ claim: 'x' }) });
   assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: 'ai-unavailable' });
+  assert.deepEqual(await response.json(), { error: 'ai-error' });
 });

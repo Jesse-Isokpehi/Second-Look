@@ -413,7 +413,7 @@
     },
     network: {
       title: 'Couldn’t reach the AI',
-      body: 'Check your internet connection. Your claim has not been checked.'
+      body: 'The connection to the AI service failed. Check your internet connection. Your claim has not been checked.'
     },
     demo: {
       title: 'Couldn’t load the demo answers',

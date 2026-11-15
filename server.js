@@ -157,7 +157,9 @@ async function handleCheck(req, res) {
   } catch (error) {
     // Log the reason here; never send upstream details (or the key) to the browser.
     console.error('AI request failed:', describeFailure(error));
-    sendJSON(res, error.name === 'AbortError' ? 504 : 502, { error: 'ai-unavailable' });
+    // Tell the page which kind of failure it was, so its message is accurate.
+    if (error.name === 'AbortError') return sendJSON(res, 504, { error: 'ai-timeout' });
+    sendJSON(res, 502, { error: error.cause ? 'ai-unreachable' : 'ai-error' });
   }
 }
 

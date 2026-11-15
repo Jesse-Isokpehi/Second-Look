@@ -7,7 +7,7 @@
  *   { verdict: 'TRUE' | 'FALSE' | 'UNCLEAR', confidence: 0-100, level: 'High' | 'Medium' | 'Low',
  *     reasons: string[], note: string, malformed: boolean }
  *
- * levelFor, matchDemo and parseVerdict are pure and unit tested (tests/verdicts.test.js).
+ * levelFor, matchDemo, parseVerdict and errorKindFor are pure and unit tested (tests/verdicts.test.js).
  */
 (function (root, factory) {
   var api = factory();
@@ -115,6 +115,22 @@
     return error;
   }
 
+  /**
+   * Which message to show when the server answers with an error.
+   * The local server (server.js) says whether the AI timed out, could not be reached, or replied with an error.
+   */
+  function errorKindFor(status, bodyText) {
+    var code = '';
+    try {
+      code = JSON.parse(bodyText).error || '';
+    } catch (e) {
+      code = '';
+    }
+    if (status === 504 || code === 'ai-timeout') return 'timeout';
+    if (code === 'ai-unreachable') return 'network';
+    return 'server';
+  }
+
   var demoData = null;
 
   function loadDemoData(url, signal) {
@@ -135,10 +151,10 @@
       body: JSON.stringify({ claim: claim }),
       signal: signal
     }).then(function (response) {
-      if (!response.ok) throw fail('server');
-      return response.text();
-    }).then(function (text) {
-      return parseVerdict(text);
+      return response.text().then(function (text) {
+        if (!response.ok) throw fail(errorKindFor(response.status, text));
+        return parseVerdict(text);
+      });
     });
   }
 
@@ -191,6 +207,7 @@
     levelFor: levelFor,
     parseVerdict: parseVerdict,
     matchDemo: matchDemo,
+    errorKindFor: errorKindFor,
     check: check
   };
 });
