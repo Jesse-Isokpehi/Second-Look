@@ -7,11 +7,14 @@
  *
  * Usage:
  *   npm run prompt-tests -- --change "what you changed in the prompt"
+ *   npm run prompt-tests -- --repeat 3 --change "..."   run every case 3 times and report
+ *                                                        how often the verdict or band changed
+ *   npm run prompt-tests -- --prompt v1 --change "..."  use prompts/system-v1.txt
  *
  * Reads ANTHROPIC_API_KEY and MODEL from the .env file (see .env.example).
  * Without a key it prints a message and exits without calling anything.
  *
- * scoreReply and summarise are pure and unit tested (tests/prompt-scoring.test.js).
+ * scoreReply, summarise and stability are pure and unit tested (tests/prompt-scoring.test.js).
  */
 'use strict';
 
@@ -25,12 +28,14 @@ const ROOT = path.join(__dirname, '..');
 const CASES_FILE = path.join(ROOT, 'tests', 'prompt-cases.json');
 const LOG_FILE = path.join(ROOT, 'docs', 'prompt-log.md');
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+// SECOND_LOOK_API_URL exists so the script can be tried against a stand-in AI.
+const API_URL = process.env.SECOND_LOOK_API_URL || 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-5-5';
 const MAX_TOKENS = 500;
 const TIMEOUT_MS = 30000;
 const NETWORK_RETRIES = 2;   // a dropped connection says nothing about the prompt, so try again
 const RETRY_WAIT_MS = 1500;
+const MAX_REPEAT = 10;
 
 const ALLOWED_VERDICTS = ['TRUE', 'FALSE', 'UNCLEAR'];
 const MAX_BULLETS = 3;
@@ -122,9 +127,40 @@ function summarise(results) {
     percent: total ? Math.round((passed / total) * 100) : 0,
     matched: results.filter((r) => r.matchesExpected).length,
     cases: results.length,
-    failedCases: results
+    failedCases: Array.from(new Set(results
       .filter((r) => Object.values(r.checks).some((value) => value === false))
-      .map((r) => r.id)
+      .map((r) => r.id)))
+  };
+}
+
+/**
+ * How consistent the model was when the same cases were run several times.
+ * `runs` is an array of runs, each an array of scoreReply results in the same case order.
+ * A run where a case got no usable reply is left out of that case's comparison, so a
+ * dropped connection is not mistaken for the model changing its mind.
+ */
+function stability(runs) {
+  const first = runs[0] || [];
+  const perCase = first.map((result, index) => {
+    const replies = runs.map((run) => run[index]).filter((r) => r && r.verdict !== null);
+    const verdicts = replies.map((r) => r.verdict);
+    const bands = replies.map((r) => r.band).filter((band) => band !== null);
+    const confidences = replies.map((r) => r.confidence).filter((value) => value !== null);
+    return {
+      id: result.id,
+      verdicts: verdicts,
+      bands: bands,
+      confidences: confidences,
+      verdictChanged: new Set(verdicts).size > 1,
+      bandChanged: new Set(bands).size > 1
+    };
+  });
+  return {
+    runs: runs.length,
+    cases: perCase.length,
+    perCase: perCase,
+    verdictChanged: perCase.filter((c) => c.verdictChanged).map((c) => c.id),
+    bandChanged: perCase.filter((c) => c.bandChanged).map((c) => c.id)
   };
 }
 
@@ -203,8 +239,38 @@ function printSummary(summary) {
   console.log('Matches known answer:'.padEnd(32) + summary.matched + '/' + summary.cases + '  (reported, not scored)');
 }
 
-const LOG_COLUMNS = ['Date', 'Prompt version', 'Model', 'Change made', 'Score', 'Per criterion (1–6)',
-  'Matches known answer', 'Failed cases'];
+/** "FALSE×3" or "FALSE×2 TRUE×1": how often each value came up across the runs. */
+function tally(values) {
+  const counts = new Map();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  return Array.from(counts, ([value, count]) => value + '×' + count).join(' ') || '(none)';
+}
+
+function printStability(runs, report, cases) {
+  console.log('');
+  console.log('Consistency across ' + report.runs + ' runs of each case');
+  console.log('');
+  console.log('case                   expected  verdicts            conf        band wanted  bands                changed?');
+  console.log('---------------------  --------  ------------------  ----------  -----------  -------------------  --------');
+  report.perCase.forEach((c, index) => {
+    const low = c.confidences.length ? Math.min(...c.confidences) : null;
+    const high = c.confidences.length ? Math.max(...c.confidences) : null;
+    const range = low === null ? '–' : (low === high ? String(low) : low + '–' + high);
+    const changed = [c.verdictChanged ? 'VERDICT' : '', c.bandChanged ? 'BAND' : ''].filter(Boolean).join(' + ') || 'no';
+    console.log([
+      c.id.padEnd(21), cases[index].expected.padEnd(8), tally(c.verdicts).padEnd(18), range.padEnd(10),
+      String(cases[index].band || '–').padEnd(11), tally(c.bands).padEnd(19), changed
+    ].join('  '));
+  });
+  console.log('');
+  console.log('Verdict changed between runs:'.padEnd(32) + report.verdictChanged.length + '/' + report.cases +
+    (report.verdictChanged.length ? '  (' + report.verdictChanged.join(', ') + ')' : ''));
+  console.log('Band changed between runs:'.padEnd(32) + report.bandChanged.length + '/' + report.cases +
+    (report.bandChanged.length ? '  (' + report.bandChanged.join(', ') + ')' : ''));
+}
+
+const LOG_COLUMNS = ['Date', 'Prompt version', 'Model', 'Change made', 'Runs', 'Score', 'Per criterion (1–6)',
+  'Matches known answer', 'Changed between runs', 'Failed cases'];
 
 /** The header of the last table in the log, so a changed format starts a new table instead of breaking the old one. */
 function lastTableHeader(text) {
@@ -241,11 +307,20 @@ function appendLog(row) {
 }
 
 function logCells(row) {
+  const report = row.stability;
+  const changed = report.runs < 2
+    ? 'n/a (1 run)'
+    : 'verdict ' + report.verdictChanged.length + '/' + report.cases +
+      ', band ' + report.bandChanged.length + '/' + report.cases +
+      (report.verdictChanged.length || report.bandChanged.length
+        ? ' (' + Array.from(new Set(report.verdictChanged.concat(report.bandChanged))).join(', ') + ')'
+        : '');
   return [
-    row.date, row.version, row.model, row.change,
+    row.date, row.version, row.model, row.change, report.runs,
     row.summary.passed + '/' + row.summary.total + ' (' + row.summary.percent + '%)',
     row.summary.perCriterion.map((c) => c.passed + '/' + c.total).join(', '),
     row.summary.matched + '/' + row.summary.cases,
+    changed,
     row.summary.failedCases.length ? row.summary.failedCases.join(', ') : 'none'
   ];
 }
@@ -269,41 +344,72 @@ async function main() {
   const model = process.env.MODEL || DEFAULT_MODEL;
   const cases = JSON.parse(fs.readFileSync(CASES_FILE, 'utf8')).cases;
 
-  console.log('Prompt ' + prompt.version + ' (' + path.basename(prompt.file) + ') · model ' + model + ' · ' + cases.length + ' cases');
+  const repeat = readRepeat(process.argv);
 
-  const results = [];
+  console.log('Prompt ' + prompt.version + ' (' + path.basename(prompt.file) + ') · model ' + model + ' · ' +
+    cases.length + ' cases' + (repeat > 1 ? ' × ' + repeat + ' runs = ' + cases.length * repeat + ' calls' : ''));
+
+  const runs = [];
   let failedCalls = 0;
-  for (const testCase of cases) {
-    let raw = null;
-    try {
-      raw = await askModel(testCase.claim, apiKey, model, prompt);
-    } catch (error) {
-      failedCalls += 1;
-      const cause = error.cause ? ' – ' + (error.cause.code || error.cause.message) : '';
-      console.log('  ' + testCase.id + ': API call failed (' + error.message + cause + ')');
+  for (let run = 1; run <= repeat; run++) {
+    if (repeat > 1) console.log('Run ' + run + ' of ' + repeat + '…');
+    const results = [];
+    for (const testCase of cases) {
+      let raw = null;
+      try {
+        raw = await askModel(testCase.claim, apiKey, model, prompt);
+      } catch (error) {
+        failedCalls += 1;
+        const cause = error.cause ? ' – ' + (error.cause.code || error.cause.message) : '';
+        console.log('  ' + testCase.id + ': API call failed (' + error.message + cause + ')');
+      }
+      results.push(scoreReply(testCase, raw));
     }
-    results.push(scoreReply(testCase, raw));
+    runs.push(results);
   }
 
   // If nothing got through (wrong key, no connection), there is no result about the prompt to record.
-  if (failedCalls === cases.length) {
+  if (failedCalls === cases.length * repeat) {
     console.log('\nEvery API call failed, so the prompt was not tested and nothing was logged.');
     console.log('Check the key and your connection, then run again.');
     process.exitCode = 1;
     return;
   }
 
-  const summary = summarise(results);
-  printTable(results, summary);
+  const summary = summarise(runs.flat());
+  const report = stability(runs);
+
+  if (repeat === 1) {
+    printTable(runs[0], summary);
+  } else {
+    printStability(runs, report, cases);
+    console.log('\nScore over all ' + repeat + ' runs');
+    printSummary(summary);
+  }
+  if (failedCalls) {
+    console.log('\nNote: ' + failedCalls + ' call(s) got no reply after retries. They count as failed checks; run again for a clean result.');
+  }
 
   appendLog({
     date: new Date().toISOString().slice(0, 10),
     version: prompt.version,
     model: model,
     change: readArg(process.argv, '--change') || 'No change noted',
-    summary: summary
+    summary: summary,
+    stability: report
   });
   console.log('\nRow added to docs/prompt-log.md');
+}
+
+/** --repeat N: how many times to run every case (1 to MAX_REPEAT). */
+function readRepeat(argv) {
+  const value = readArg(argv, '--repeat');
+  if (value === null) return 1;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > MAX_REPEAT) {
+    throw new Error('--repeat must be a whole number from 1 to ' + MAX_REPEAT + '.');
+  }
+  return number;
 }
 
 if (require.main === module) {
@@ -313,4 +419,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CRITERIA, scoreReply, summarise, injectedVerdict, lastTableHeader };
+module.exports = { CRITERIA, scoreReply, summarise, stability, injectedVerdict, lastTableHeader, readRepeat };

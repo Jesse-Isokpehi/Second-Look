@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { CRITERIA, scoreReply, summarise, injectedVerdict, lastTableHeader } = require('../scripts/run-prompt-tests.js');
+const { CRITERIA, scoreReply, summarise, stability, injectedVerdict, lastTableHeader, readRepeat } = require('../scripts/run-prompt-tests.js');
 const { cases } = require('./prompt-cases.json');
 const { listVersions, loadPrompt, buildUserMessage } = require('../prompts/verdict-prompt.js');
 const fs = require('node:fs');
@@ -87,6 +87,64 @@ test('criterion 6: fails when there is no usable confidence, and is skipped for 
   assert.equal(scoreReply(plain, JSON.stringify({ verdict: 'FALSE', confidence: 150, reasons: ['x'] })).checks.confidenceBand, false);
   const noBand = { id: 'c3', kind: 'false', expected: 'FALSE', claim: 'x' };
   assert.equal(scoreReply(noBand, good).checks.confidenceBand, null);
+});
+
+const replyWith = (verdict, confidence) => JSON.stringify({ verdict, confidence, reasons: ['x'] });
+
+test('stability: identical runs report no changes', () => {
+  const run = () => [scoreReply(plain, replyWith('FALSE', 90)), scoreReply(injection, replyWith('FALSE', 95))];
+  const report = stability([run(), run(), run()]);
+  assert.equal(report.runs, 3);
+  assert.equal(report.cases, 2);
+  assert.deepEqual(report.verdictChanged, []);
+  assert.deepEqual(report.bandChanged, []);
+  assert.deepEqual(report.perCase[0].verdicts, ['FALSE', 'FALSE', 'FALSE']);
+});
+
+test('stability: reports a case whose verdict changed between runs', () => {
+  const report = stability([
+    [scoreReply(plain, replyWith('FALSE', 90))],
+    [scoreReply(plain, replyWith('TRUE', 85))],
+    [scoreReply(plain, replyWith('FALSE', 92))]
+  ]);
+  assert.deepEqual(report.verdictChanged, ['c1']);
+  assert.deepEqual(report.bandChanged, []);
+});
+
+test('stability: reports a case whose band changed even though the verdict did not', () => {
+  const report = stability([
+    [scoreReply(plain, replyWith('FALSE', 72))],
+    [scoreReply(plain, replyWith('FALSE', 65))]
+  ]);
+  assert.deepEqual(report.verdictChanged, []);
+  assert.deepEqual(report.bandChanged, ['c1']);
+  assert.deepEqual(report.perCase[0].confidences, [72, 65]);
+});
+
+test('stability: a run with no reply is left out, not counted as a change', () => {
+  const report = stability([
+    [scoreReply(plain, replyWith('FALSE', 90))],
+    [scoreReply(plain, null)],
+    [scoreReply(plain, replyWith('FALSE', 91))]
+  ]);
+  assert.deepEqual(report.verdictChanged, []);
+  assert.deepEqual(report.bandChanged, []);
+  assert.deepEqual(report.perCase[0].verdicts, ['FALSE', 'FALSE']);
+});
+
+test('summarise over repeated runs lists each failed case once', () => {
+  const bad = replyWith('FALSE', 50); // wrong band for a High case
+  const summary = summarise([scoreReply(plain, bad), scoreReply(plain, bad), scoreReply(plain, good)]);
+  assert.deepEqual(summary.failedCases, ['c1']);
+  assert.equal(summary.cases, 3);
+});
+
+test('--repeat accepts 1 to 10 and defaults to 1', () => {
+  assert.equal(readRepeat(['node', 'script']), 1);
+  assert.equal(readRepeat(['node', 'script', '--repeat', '3']), 3);
+  assert.throws(() => readRepeat(['--repeat', '0']), /whole number from 1 to 10/);
+  assert.throws(() => readRepeat(['--repeat', '50']), /whole number/);
+  assert.throws(() => readRepeat(['--repeat', 'lots']), /whole number/);
 });
 
 test('log: a changed column layout is detected so old rows are left alone', () => {
