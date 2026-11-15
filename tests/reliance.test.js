@@ -11,6 +11,7 @@ function decide(tracker, overrides) {
     verdict: 'FALSE',
     confidence: 90,
     level: 'High',
+    hedgeVariant: 'high-1',
     choice: 'agree',
     whyOpened: false,
     decisionSeconds: 2,
@@ -136,6 +137,7 @@ test('record stores every field of the log entry', () => {
     claim: 'Goldfish have a three-second memory',
     confidence: 58,
     level: 'Medium',
+    hedgeVariant: 'medium-3',
     choice: 'disagree',
     whyOpened: true,
     decisionSeconds: 7.25
@@ -145,11 +147,13 @@ test('record stores every field of the log entry', () => {
     verdict: 'FALSE',
     confidence: 58,
     level: 'Medium',
+    hedgeVariant: 'medium-3',
     choice: 'disagree',
     ownCall: '',
     whyOpened: true,
     decisionSeconds: 7.25,
     escalated: false,
+    promptsPaused: false,
     timestamp: '2026-01-01T00:00:00.000Z'
   });
   assert.equal(tracker.entries().length, 1);
@@ -166,7 +170,7 @@ test('stats count each kind of decision', () => {
   quickAgrees(tracker, 2);
   decide(tracker, { choice: 'disagree', whyOpened: true });
   decide(tracker, { choice: 'own-call', ownCall: 'FALSE', escalated: true });
-  assert.deepEqual(tracker.stats(), { checked: 4, agreed: 2, disagreed: 1, whyOpened: 1, escalated: 1 });
+  assert.deepEqual(tracker.stats(), { checked: 4, agreed: 2, disagreed: 1, whyOpened: 1, escalated: 1, whilePaused: 0 });
 });
 
 test('noteWhyOpened can flag an entry that is already logged', () => {
@@ -182,14 +186,61 @@ test('toCSV writes a header and one quoted row per decision', () => {
   decide(tracker, { claim: 'He said "hello", twice' });
   const lines = tracker.toCSV().trim().split('\r\n');
   assert.equal(lines.length, 2);
-  assert.equal(lines[0], 'claim,verdict,confidence,level,choice,own_call,why_opened,decision_seconds,escalated,timestamp');
-  assert.equal(lines[1], '"He said ""hello"", twice","FALSE","90","High","agree","","false","2.0","false","2026-01-01T00:00:00.000Z"');
+  assert.equal(lines[0], 'claim,verdict,confidence,level,hedge_variant,choice,own_call,why_opened,decision_seconds,escalated,prompts_paused,timestamp');
+  assert.equal(lines[1], '"He said ""hello"", twice","FALSE","90","High","high-1","agree","","false","2.0","false","false","2026-01-01T00:00:00.000Z"');
 });
 
 test('toCSV neutralises claims that look like spreadsheet formulas', () => {
   const tracker = createTracker();
   decide(tracker, { claim: '=SUM(A1:A9)' });
   assert.ok(tracker.toCSV().includes('"\'=SUM(A1:A9)"'));
+});
+
+test('record logs which hedge variant was shown', () => {
+  const tracker = createTracker();
+  const entry = decide(tracker, { hedgeVariant: 'low-2' });
+  assert.equal(entry.hedgeVariant, 'low-2');
+  assert.ok(tracker.toCSV().includes('"low-2"'));
+});
+
+test('paused: escalation never triggers, on Medium or Low', () => {
+  const tracker = createTracker();
+  quickAgrees(tracker, 5);
+  tracker.setPaused(true);
+  assert.equal(tracker.beginClaim('Medium'), false);
+  assert.equal(tracker.beginClaim('Low'), false);
+});
+
+test('paused: the streak is kept, so resuming lets the next Medium verdict trigger', () => {
+  const tracker = createTracker();
+  quickAgrees(tracker, 5);
+  tracker.setPaused(true);
+  assert.equal(tracker.beginClaim('Medium'), false);
+  assert.equal(tracker.streak(), 5);
+  tracker.setPaused(false);
+  assert.equal(tracker.beginClaim('Medium'), true);
+});
+
+test('paused: decisions made while paused are logged as such', () => {
+  const tracker = createTracker();
+  decide(tracker);
+  tracker.setPaused(true);
+  decide(tracker);
+  decide(tracker);
+  tracker.setPaused(false);
+  decide(tracker);
+  assert.deepEqual(tracker.entries().map((e) => e.promptsPaused), [false, true, true, false]);
+  assert.equal(tracker.stats().whilePaused, 2);
+  assert.ok(tracker.toCSV().includes('prompts_paused'));
+});
+
+test('paused: starts off, and reset turns it off again', () => {
+  const tracker = createTracker();
+  assert.equal(tracker.isPaused(), false);
+  tracker.setPaused(true);
+  assert.equal(tracker.isPaused(), true);
+  tracker.reset();
+  assert.equal(tracker.isPaused(), false);
 });
 
 test('reset clears the log and the streak', () => {
