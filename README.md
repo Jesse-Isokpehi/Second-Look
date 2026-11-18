@@ -1,9 +1,56 @@
-# Second LooK
+# Second Look
 
-Check a claim you saw online. The AI says what it thinks and how sure it is; the final call is yours.
-If you start agreeing quickly without looking closer, Second Look asks for your own answer first.
+**README prose word count: about 1,340** (excluding code, commands, tables of file names and links)
 
-## Run it
+An AI fact checker that supports appropriate reliance. Paste a claim or an AI answer; the AI gives a
+verdict and says how sure it is, and the final call is yours. If you start agreeing quickly without
+looking closer, Second Look asks for your own answer first.
+
+Built for **Assignment 2, Intelligent Interactive Systems** (University of Birmingham).
+Submitted version: tag [`v1.0-submission`](https://github.com/jesse-isokpehi/second-look/releases/tag/v1.0-submission).
+
+## Project status
+
+**Implemented (works in live mode)**
+- Claim input (max 300 characters), loading state with cancel
+- Live verdicts from the Claude API: TRUE / FALSE / UNCLEAR, confidence 0–100, up to 3 reasons
+- Confidence shown four ways: a first-person hedge (3 wordings per level), a word label, a number and a bar
+- "Why?" panel, hidden until asked for, labelled "Written by the AI · no sources yet"
+- Reply validation in the browser: anything unreadable is shown as UNCLEAR
+- Behaviour tracker and second-look prompt (rule below), with "Why am I seeing this?" and a pause toggle
+- "Your call vs the AI" comparison and a session summary with CSV export
+- Error handling: timeouts, dropped connections (one retry), API errors, double clicks
+
+**Simulated**
+- **Demo mode:** pre-written answers in `data/demo-responses.json`, used when no API key is set.
+  A "Demo mode · responses simulated" badge is shown. Unknown claims return UNCLEAR.
+
+**Not built (planned)**
+- Evidence retrieval with sources shown to the user
+- Calibrated confidence (the model's confidence is self-reported)
+- Cross-session tracking that the user can inspect and delete
+- A multi-week study of whether varied hedges stay noticed
+
+**Known limitations**
+- Confidence is effectively two-level in testing (High 88–99, Low 10–25), so the prompt seldom fires on factual claims.
+- "Disagree" is ambiguous on an UNCLEAR verdict (found in the user check; not yet changed).
+- The session log lives in memory only and is cleared on a new session.
+
+## Technology stack
+
+| Part | Technology | What it does |
+| --- | --- | --- |
+| Front end | HTML, CSS, plain JavaScript (no framework) | Screens, tracker, hedges, validation |
+| Server | Node.js 20+ `http` module, no dependencies | Serves the page, builds the prompt, keeps the API key off the browser |
+| AI model | Claude API, `claude-sonnet-5-5` (Anthropic) | Returns the verdict, confidence and reasons as JSON |
+| Prompt | `prompts/system-v1.txt` | System prompt; the claim is wrapped in `<claim>` tags |
+| Tests | Node's built-in test runner (`node --test`) | Unit tests for tracker, verdicts, hedges, scoring and server |
+| Prompt tests | `scripts/run-prompt-tests.js` | Scores live replies against `docs/prompt-criteria.md` |
+| Font | Inter Tight (Google Fonts, SIL OFL 1.1) | Interface type |
+
+**Still undecided:** the retrieval source and ranking method, and how to calibrate confidence.
+
+## Running or inspecting the work
 
 Needs [Node.js](https://nodejs.org) 20 or newer. Nothing else to install.
 
@@ -11,136 +58,159 @@ Needs [Node.js](https://nodejs.org) 20 or newer. Nothing else to install.
 npm start
 ```
 
-Then visit <http://localhost:8000>. Press Ctrl+C in the terminal to stop.
+Then open <http://localhost:8000>. Press Ctrl+C to stop.
 
-Without an API key the app runs in **demo mode** with simulated answers. To use the real AI:
+**Without an API key** the app runs in demo mode. This is the quickest way to inspect it.
 
-1. Copy `.env.example` to a new file called `.env`.
-2. In `.env`, put your Anthropic API key after `ANTHROPIC_API_KEY=` (no quotes, no spaces).
-3. Run `npm start` again. The "Demo mode" label disappears.
+**Live mode (use your own key):**
 
-`.env` is ignored by git, so the key is never committed. The key stays on the local server
-(`server.js`); it is never sent to the browser.
+1. Copy `.env.example` to `.env`.
+2. Put your Anthropic API key after `ANTHROPIC_API_KEY=` (no quotes, no spaces).
+3. Run `npm start` again. The "Demo mode" badge disappears.
 
-You can also open `index.html` without Node (PyCharm: right-click → Open In → Browser). That
-always runs in demo mode. Double-clicking the file in a folder will not load the demo answers.
+`.env` is git-ignored, so the key is never committed, and it stays on the local server. No key is
+included in this repository.
 
-## Run the tests
+**See the second-look prompt quickly:** open <http://localhost:8000/?demoStreak=1>. The app starts as
+if five quick agrees had already happened, so the first Medium or Low answer shows the prompt. In
+demo mode, try "The Eiffel Tower grows taller in summer".
 
-Needs [Node.js](https://nodejs.org) 20 or newer. Nothing else to install.
+**The rule** (`js/reliance.js`): 5 agrees in a row, each under 4 seconds, without opening "Why?",
+then a Medium or Low verdict, while prompts are not paused. Disagreeing, opening "Why?" or a slow
+agree resets the streak.
+
+**Run the tests:**
 
 ```bash
 npm test
 ```
 
-The tests cover the escalation rule, pause switch and session log (`tests/reliance.test.js`), the
-handling of AI replies and demo answers (`tests/verdicts.test.js`), the hedge wording
-(`tests/hedges.test.js`), the prompt-test scoring (`tests/prompt-scoring.test.js`) and the local
-server (`tests/server.test.js`, using a stand-in for the AI, so no key is needed).
-
-## Test the system prompt
-
-The system prompt sent to the live AI is a plain text file, `prompts/system-v1.txt`. A script sends
-20 claims with known answers (`tests/prompt-cases.json`) to the Anthropic API and scores each reply
-against the six criteria in `docs/prompt-criteria.md`. Every run adds a row to `docs/prompt-log.md`.
-
-It reads the key and model from `.env` (see "Run it" above). Without a key it prints "Skipped" and
-does nothing. Each case is one small paid API call.
+**Run the prompt tests** (live key needed; each case is one small paid call):
 
 ```bash
-npm run prompt-tests -- --change "what you changed in the prompt"
+npm run prompt-tests -- --repeat 3 --change "what you changed"
 ```
 
-Run every case 3 times to see how consistent the answers are (60 calls). The report lists the cases
-whose verdict or confidence band changed between runs:
+Each run adds a row to `docs/prompt-log.md`.
 
-```bash
-npm run prompt-tests -- --repeat 3 --change "what you changed in the prompt"
-```
+**Inspect without running:** the storyboards and architecture diagram are in `docs/figures/`, and the
+screenshots they were built from are in `docs/screenshots/`.
 
-**To try a new prompt:** copy `prompts/system-v1.txt` to `prompts/system-v2.txt` and edit the copy.
-The highest number is used automatically by the tests and by `npm start`, and the version is
-written to the log. To go back, add `--prompt v1` to the command, or set `PROMPT_VERSION=v1` in
-`.env` for the app.
+## Development record
 
-Never put the key anywhere except `.env`.
+Grouped by stage. Links go to the commits.
 
-## Demo mode and live mode
+**1. Idea and screens (31 Oct – 11 Nov)**
+- Changed the project from a quiz to a live fact checker. A quiz on known answers tested my
+  Assignment 1 hypothesis but did not help anyone check a claim; the fact checker keeps the same
+  hedges inside a real task.
+- Designed the screens and purple-brown theme as mockups first, then built page shells
+  ([41450ae](https://github.com/jesse-isokpehi/second-look/commit/41450ae),
+  [3297c04](https://github.com/jesse-isokpehi/second-look/commit/3297c04),
+  [a28a306](https://github.com/jesse-isokpehi/second-look/commit/a28a306)).
 
-The app runs in **demo mode** by default: no API key and no AI call. Answers are pre-written in
-`data/demo-responses.json`. Any other claim comes back as "UNCLEAR", low confidence, and says so in
-its explanation.
+**2. Core logic (12 Nov)**
+- Moved demo answers into a data file and validated AI replies, so an unreadable reply becomes
+  UNCLEAR instead of breaking the page
+  ([4602247](https://github.com/jesse-isokpehi/second-look/commit/4602247),
+  [c9bd8b5](https://github.com/jesse-isokpehi/second-look/commit/c9bd8b5)).
+- Added the behaviour tracker and escalation rule with unit tests, then wired them into the screens
+  ([76469c4](https://github.com/jesse-isokpehi/second-look/commit/76469c4),
+  [e696580](https://github.com/jesse-isokpehi/second-look/commit/e696580)).
 
-Claims with a prepared answer: Ronaldo's Ballon d'Ors, Hal Jordan, the Eiffel Tower in summer,
-cracking knuckles, lightning striking twice, the Great Wall from space, using 10% of our brains,
-bats being blind, bulls and the colour red, goldfish memory, and coffee and growth.
+**3. Hedges, control and explanation dosage (15 Nov)**
+- Added varied first-person hedges (3 per level) and logged which one was shown
+  ([f513f60](https://github.com/jesse-isokpehi/second-look/commit/f513f60),
+  [10b67fb](https://github.com/jesse-isokpehi/second-look/commit/10b67fb)).
+- Added a pause toggle so the user stays in control of the prompt
+  ([7ff9f18](https://github.com/jesse-isokpehi/second-look/commit/7ff9f18)).
+- Limited explanations to 3 bullets and labelled them as AI-written with no sources
+  ([37df318](https://github.com/jesse-isokpehi/second-look/commit/37df318)).
 
-**Live mode** is used when the app is started with `npm start` and `.env` contains a key. The page
-sends the claim to the local server, which adds the system prompt (`prompts/system-v1.txt`) and
-asks the model named by `MODEL` in `.env`. The reply is validated in the page before it is shown.
+**4. Live mode and key safety (15 Nov)**
+- Added `.env` and `.gitignore` before any key was used
+  ([4131b59](https://github.com/jesse-isokpehi/second-look/commit/4131b59)).
+- Added a local server so the key never reaches the browser
+  ([349838d](https://github.com/jesse-isokpehi/second-look/commit/349838d)).
+- Checked: `git status` showed `.env` untracked, and `git grep "sk-ant-"` found only the test placeholder.
 
-## Screens
+**5. Prompt testing (15 Nov)**
+- Wrote six pass criteria before the first run (`docs/prompt-criteria.md`) and a script that logs every
+  run ([cc0342f](https://github.com/jesse-isokpehi/second-look/commit/cc0342f)).
+- First run scored 41/49 because of two network failures, not model errors. I kept that run in the
+  log, added a retry for dropped connections
+  ([9f7a584](https://github.com/jesse-isokpehi/second-look/commit/9f7a584)), and the rerun scored 49/49.
+- A perfect score meant the cases were too easy. Added harder cases with expected confidence bands and
+  a `--repeat` option ([652864c](https://github.com/jesse-isokpehi/second-look/commit/652864c),
+  [78a9f70](https://github.com/jesse-isokpehi/second-look/commit/78a9f70)).
+  Result: 60/60 correct verdicts, no changes between repeats, 3/3 injections ignored, 54/60 in the
+  expected band.
+- Finding: confidence was effectively two-level and no Medium appeared, matching Zhou et al. (2024).
+  I considered a v2 prompt but kept v1 for submission, because changing the prompt would not make the
+  confidence calibrated. Recorded as a limitation instead.
 
-1. **Start** – paste a claim or pick an example.
-2. **Loading** – claim locked and buttons disabled while the AI responds. Can be cancelled.
-3. **Verdict** – a first-person hedge sentence, the verdict, confidence as word + number + bar,
-   then Agree / Disagree. The hedge is picked at random from 3 wordings per confidence level.
-4. **"Why?" open** – the AI's reasoning, shown only when asked for.
-5. **Second-look prompt** – the AI's answer is hidden until you make your own call.
-6. **Your call vs the AI** – both answers side by side. No right/wrong is shown.
-7. **Session summary** – counts, a log of every decision, and a CSV download.
+**6. Trigger and user check (16 Nov)**
+- Tested the trigger live. Rushed agrees took 0.7–1.3 s; considered decisions took 19–129 s, so I
+  kept the 4-second threshold. The prompt then fired naturally, without the shortcut (Storyboard B).
+- User check: another person tried their own claims. Most were predictions or opinions, which the
+  system correctly returned as UNCLEAR. This exposed that "Disagree" is ambiguous on an UNCLEAR verdict.
+- Full notes: `docs/dev-notes.md`. Prompt runs: `docs/prompt-log.md`.
 
-### When the second-look prompt appears
+## AI assistance
 
-All of these must be true (`js/reliance.js`):
+**Tools used**
+- **Claude Code** (Anthropic): wrote most of the code, tests and scripts from my specifications.
+  Commits authored by "Claude" in the history are from Claude Code; I reviewed and merged them.
+- **Claude** (claude.ai chat): helped plan the scope, review the report against the brief and lecture
+  concepts, check the architecture diagram against the code, and compose the storyboards from my
+  screenshots.
+- **Claude design canvas:** screen mockups and theme before coding.
+- **Claude API** (`claude-sonnet-5-5`): the live model inside the app. I paid for the key myself.
 
-- 5 agrees in a row
-- each made in under 4 seconds
-- "Why?" not opened on any of them
-- the next verdict is Medium or Low confidence
+**What I decided, changed and checked (examples)**
+- **Scope:** I chose to build a fact checker instead of a quiz, and chose which features to build
+  now and which to leave as planned.
+- **Design choices:** I chose to keep the word + number + bar even though Ojewale et al. (2026) found
+  combined cues can increase over-reliance, and recorded the trade-off in the report.
+- **Threshold:** I ran the live timing tests myself and kept 4 seconds based on the data, instead of
+  changing it after one confusing run.
+- **Diagram:** the first AI-drawn diagram showed validation on the server and demo answers going
+  through the server. Checking the code showed both happen in the browser, so it was corrected.
+- **Report wording:** I corrected claims that did not match the evidence, for example "schema-validated
+  JSON" (there is no formal schema) and a reversed description of the habituation research.
+- **Storyboards:** I noticed screenshots came from mixed sessions, so I retook them in one live session.
+- **Key safety:** I checked `.env` was never committed before every push.
 
-Opening "Why?", disagreeing, or a slow agree resets the streak.
+## Additional files
 
-"Pause second-look prompts" (in the header, and under "Why am I seeing this?") switches the prompt
-off until it is resumed or a new session starts. Decisions made while paused are marked in the log.
+- `docs/figures/`: architecture diagram (PNG and editable `.mmd` source) and Storyboards A–C
+- `docs/screenshots/`: the live-mode screenshots used in the storyboards
+- `docs/dev-notes.md`: dated design decisions and checks
+- `docs/prompt-criteria.md`, `docs/prompt-log.md`: prompt test criteria and every run
+- `Vivid Description.md`: design and screen notes
 
-To see it the real way: agree fast with five High-confidence claims (Ronaldo, Hal Jordan, Great
-Wall, 10% of our brains, bats are blind), then check "The Eiffel Tower grows taller in summer".
-
-**Shortcut for demos and marking:** add `?demoStreak=1` to the address, e.g.
-<http://localhost:8000/?demoStreak=1>. The app then starts as if five quick agrees had already
-happened, so the first Medium or Low answer shows the prompt. A dashed note on the start screen
-shows the shortcut is on. Nothing is added to the session log by the shortcut itself.
-
-### When things go wrong
-
-- **Empty claim:** the button stays disabled and a hint says what to do.
-- **Long claim:** input stops at 300 characters, with a message.
-- **API error or timeout:** a "no answer" screen offers Try again, Use demo mode instead, or Edit claim.
-- **Unreadable AI reply:** shown as UNCLEAR, Low confidence, with a note saying the reply could not be read.
-- **Double-clicks:** a decision is logged once, and a second click cannot land on the next screen.
+No ZIP is needed; everything is in this repository.
 
 ## Files
 
 | File | What it does |
 | --- | --- |
 | `index.html` | Page shell: header, main area, footer |
-| `css/styles.css` | Design tokens (colours, radii, type) and component styles |
-| `server.js` | Local server for `npm start`: serves the page and calls the AI with the key from `.env` |
+| `css/styles.css` | Design tokens and component styles |
+| `server.js` | Local server: serves the page and calls the AI with the key from `.env` |
 | `.env.example` | Template for `.env`, where your API key goes |
 | `js/config.js` | Settings: timeout, claim length limit, server addresses |
 | `js/verdicts.js` | Gets a verdict (demo file or live API) and validates the reply |
-| `js/reliance.js` | Behaviour tracker, escalation rule, pause switch, CSV export. Pure logic |
-| `js/hedges.js` | Hedge wording shown above the verdict. Pure logic |
+| `js/reliance.js` | Behaviour tracker, escalation rule, pause switch, CSV export |
+| `js/hedges.js` | Hedge wording shown above the verdict |
 | `js/app.js` | Screens and interaction |
 | `data/demo-responses.json` | Pre-written answers for demo mode |
-| `prompts/system-v1.txt` | The system prompt for the live AI. One file per version |
+| `prompts/system-v1.txt` | System prompt for the live AI |
 | `prompts/verdict-prompt.js` | Loads the newest prompt file |
-| `tests/` | Unit tests, plus `prompt-cases.json` for the prompt tests |
+| `tests/` | Unit tests and `prompt-cases.json` |
 | `scripts/run-prompt-tests.js` | Runs the prompt cases against the live API and logs the score |
 | `scripts/load-env.js` | Reads `.env` for the server and the prompt tests |
-| `docs/prompt-criteria.md` | The six success criteria for the prompt |
-| `docs/prompt-log.md` | One row per prompt test run |
-| `Vivid Description.md` | Design and screen notes for working on the project |
 
-The session log is kept in memory for one session only. Nothing is stored or sent anywhere.
+## Licence
+
+MIT. See `LICENSE`.
