@@ -1,0 +1,68 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"15px","primaryTextColor":"#2B1E24","lineColor":"#5C3346","clusterBkg":"#FBF7F5","clusterBorder":"#D5C3CB"},"flowchart":{"wrappingWidth":320},"themeCSS":".cluster-label .nodeLabel, .cluster-label span, .cluster-label p { font-size: 21px !important; font-weight: 800 !important; color: #5C3346 !important; fill: #5C3346 !important; letter-spacing: 0.04em; }"}}%%
+flowchart LR
+  subgraph L["KEY"]
+    direction TB
+    LI["Implemented"]
+    LS["Simulated"]
+    LP["Planned"]
+  end
+  subgraph H["HUMAN"]
+    U(["User<br/>claim or AI answer"])
+  end
+  subgraph S["SENSING · browser"]
+    IN["Claim input<br/>max 300 characters"]
+    EV["Choices + timing<br/>Agree · Disagree · Why? · own call"]
+  end
+  subgraph C["CONTEXT · Node server"]
+    PB["Prompt builder<br/>system-vN.txt + claim in &lt;claim&gt; tags<br/>API key stays here"]
+  end
+  subgraph K["KNOWLEDGE"]
+    RET["Evidence retrieval<br/>+ source ranking"]
+  end
+  subgraph M["MODEL"]
+    LLM["Claude API<br/>claude-sonnet-5-5"]
+    DEMO["Demo answers<br/>demo-responses.json"]
+  end
+  subgraph V["CHECK · browser (verdicts.js)"]
+    VAL["Reply validator<br/>verdict set · confidence 0–100<br/>≤3 reasons · else UNCLEAR"]
+    CAL["Confidence<br/>calibration"]
+  end
+  subgraph P["DECISION · reliance model (reliance.js)"]
+    TR["Reliance tracker<br/>streak · decision time · Why? use"]
+    ER{"Second-look rule<br/>5 quick agrees (&lt;4 s)<br/>+ Medium/Low + not paused"}
+  end
+  subgraph A["ACTION · output"]
+    SL["Second-look prompt<br/>verdict hidden · user guesses first"]
+    VD["Verdict view<br/>hedge variant · word · number · bar"]
+    WHY["Why? panel<br/>≤3 reasons · AI-written label"]
+    CMP["Your call vs AI"]
+  end
+  subgraph F["FEEDBACK · ADAPTATION"]
+    LOG["Session log<br/>in memory"]
+    SUM["Summary + CSV"]
+    PAUSE["Pause toggle"]
+    XS["Cross-session store<br/>inspect · delete"]
+  end
+
+  U --> IN
+  IN -- "live: key set" --> PB
+  RET -.-> PB
+  PB --> LLM --> VAL
+  IN -. "demo: no key" .-> DEMO --> VAL
+  VAL -.-> CAL
+  VAL --> ER
+  ER -- "escalate" --> SL --> CMP
+  ER -- "normal" --> VD
+  VD -- "on request" --> WHY
+  A -- "shown to user" --> U
+  U --> EV --> TR -- "streak" --> ER
+  TR --> LOG --> SUM --> U
+  PAUSE --> ER
+  LOG -.-> XS
+
+  classDef impl fill:#FFFFFF,stroke:#5C3346,stroke-width:2px,color:#2B1E24;
+  classDef sim fill:#F4EAEF,stroke:#8A6577,stroke-width:2px,stroke-dasharray:6 4,color:#2B1E24;
+  classDef plan fill:#F2F0F1,stroke:#8C8088,stroke-width:1.5px,stroke-dasharray:2 4,color:#5A4E54;
+  class LI,U,IN,EV,PB,LLM,VAL,TR,ER,VD,WHY,SL,CMP,LOG,SUM,PAUSE impl;
+  class DEMO,LS sim;
+  class RET,CAL,XS,LP plan;
