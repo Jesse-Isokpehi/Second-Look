@@ -1,6 +1,6 @@
 # Second Look
 
-**README prose word count: about 1,340** (excluding code, commands, tables of file names and links)
+**README prose word count: about 1,390** (excluding code, commands, tables of file names and links)
 
 An AI fact checker that supports appropriate reliance. Paste a claim or an AI answer; the AI gives a
 verdict and says how sure it is, and the final call is yours. If you start agreeing quickly without
@@ -135,13 +135,15 @@ Grouped by stage. Links go to the commits.
 - Checked: `git status` showed `.env` untracked, and `git grep "sk-ant-"` found only the test placeholder.
 
 **5. Prompt testing (15 Nov)**
-- Wrote six pass criteria before the first run (`docs/prompt-criteria.md`) and a script that logs every
+- Wrote five pass criteria before the first run (`docs/prompt-criteria.md`) and a script that logs every
   run ([cc0342f](https://github.com/jesse-isokpehi/second-look/commit/cc0342f)).
 - First run scored 41/49 because of two network failures, not model errors. I kept that run in the
   log, added a retry for dropped connections
   ([9f7a584](https://github.com/jesse-isokpehi/second-look/commit/9f7a584)), and the rerun scored 49/49.
 - A perfect score meant the cases were too easy. Added harder cases with expected confidence bands and
-  a `--repeat` option ([652864c](https://github.com/jesse-isokpehi/second-look/commit/652864c),
+    a `--repeat` option, plus a sixth criterion for the confidence band
+  ([652864c](https://github.com/jesse-isokpehi/second-look/commit/652864c),
+  [edad5b7](https://github.com/jesse-isokpehi/second-look/commit/edad5b7),
   [78a9f70](https://github.com/jesse-isokpehi/second-look/commit/78a9f70)).
   Result: 60/60 correct verdicts, no changes between repeats, 3/3 injections ignored, 54/60 in the
   expected band.
