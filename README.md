@@ -25,11 +25,13 @@ Submitted version: tag [`v1.0-submission`](https://github.com/jesse-isokpehi/sec
 - **Demo mode:** pre-written answers in `data/demo-responses.json`, used when no API key is set.
   A "Demo mode · responses simulated" badge is shown. Unknown claims return UNCLEAR.
 
-**Not built (planned)**
-- Evidence retrieval with sources shown to the user
-- Calibrated confidence (the model's confidence is self-reported)
-- Cross-session tracking that the user can inspect and delete
-- A multi-week study of whether varied hedges stay noticed
+**Not built (planned): what a production version would add**
+- **Browser extension:** highlight text on any page or AI chat to see the verdict in a small pop-up beside it.
+- **Real sources:** the "Why?" panel would link the evidence behind each verdict, such as Wikipedia pages, research papers and fact-checking sites.
+- **Calibrated confidence:** adjust stated confidence to match how often the model is right (testing showed only High 88–99 or Low 10–25).
+- **Cross-session tracking:** remember reliance habits, with a page to view and delete stored data.
+- **Clearer UNCLEAR choices:** replace Agree / Disagree on UNCLEAR verdicts (found in the user check).
+- **Evaluation:** a multi-week study of whether varied hedges stay noticed.
 
 **Known limitations**
 - Confidence is effectively two-level in testing (High 88–99, Low 10–25), so the prompt seldom fires on factual claims.
@@ -134,7 +136,7 @@ Grouped by stage. Links go to the commits.
   ([349838d](https://github.com/jesse-isokpehi/second-look/commit/349838d)).
 - Checked: `git status` showed `.env` untracked, and `git grep "sk-ant-"` found only the test placeholder.
 
-**5. Prompt testing (15 Nov)**
+**5. Prompt testing (17 Nov)**
 - Wrote five pass criteria before the first run (`docs/prompt-criteria.md`) and a script that logs every
   run ([cc0342f](https://github.com/jesse-isokpehi/second-look/commit/cc0342f)).
 - First run scored 41/49 because of two network failures, not model errors. I kept that run in the
@@ -150,8 +152,9 @@ Grouped by stage. Links go to the commits.
 - Finding: confidence was effectively two-level and no Medium appeared, matching Zhou et al. (2024).
   I considered a v2 prompt but kept v1 for submission, because changing the prompt would not make the
   confidence calibrated. Recorded as a limitation instead.
+- Terminal output for all three runs is in `docs/screenshots/tests/`.
 
-**6. Trigger and user check (16 Nov)**
+**6. Trigger and user check (18 Nov)**
 - Tested the trigger live. Rushed agrees took 0.7–1.3 s; considered decisions took 19–129 s, so I
   kept the 4-second threshold. The prompt then fired naturally, without the shortcut (Storyboard B).
 - User check: another person tried their own claims. Most were predictions or opinions, which the
@@ -161,10 +164,9 @@ Grouped by stage. Links go to the commits.
 ## AI assistance
 
 **Tools used**
-- **Claude Code** (Anthropic): wrote most of the code, tests and scripts from my specifications.
+- **Claude Code** (Anthropic): aided in some bits of code, tests and scripts from my specifications.
   Commits authored by "Claude" in the history are from Claude Code; I reviewed and merged them.
-- **Claude** (claude.ai chat): helped plan the scope, review the report against the brief and lecture
-  concepts, check the architecture diagram against the code, and compose the storyboards from my
+- **Claude** (claude.ai chat): helped plan the scope and milestones to structure development, checked the architecture diagram against the code, and compose the storyboards from my
   screenshots.
 - **Claude design canvas:** screen mockups and theme before coding.
 - **Claude API** (`claude-sonnet-5-5`): the live model inside the app. I paid for the key myself.
@@ -174,8 +176,9 @@ Grouped by stage. Links go to the commits.
   now and which to leave as planned.
 - **Design choices:** I chose to keep the word + number + bar even though Ojewale et al. (2026) found
   combined cues can increase over-reliance, and recorded the trade-off in the report.
-- **Threshold:** I ran the live timing tests myself and kept 4 seconds based on the data, instead of
-  changing it after one confusing run.
+- **Threshold:** I ran the live timing tests myself. When the prompt did not fire on one run, the
+  suggested fix was to loosen the threshold; the log showed the streak had simply reset after an
+  earlier prompt, so I kept 4 seconds.
 - **Diagram:** the first AI-drawn diagram showed validation on the server and demo answers going
   through the server. Checking the code showed both happen in the browser, so it was corrected.
 - **Report wording:** I corrected claims that did not match the evidence, for example "schema-validated
@@ -185,8 +188,11 @@ Grouped by stage. Links go to the commits.
 
 ## Additional files
 
-- `docs/figures/`: architecture diagram (PNG and editable `.mmd` source) and Storyboards A–C
-- `docs/screenshots/`: the live-mode screenshots used in the storyboards
+- `docs/figures/`: `architecture.png`, `architecture.svg` and editable `architecture.mmd`
+  (Figure 1), and `storyboard_A.png`, `storyboard_B.png`, `storyboard_C.png` (Figures 2–4)
+- `docs/screenshots/`: the raw live-mode screenshots (A1–A5, B1–B5, C1–C3) used in the storyboards.
+  To edit the diagram, paste `architecture.mmd` into <https://mermaid.live>.
+- `docs/screenshots/tests/`: terminal output from the baseline, rerun and harder prompt-test runs
 - `docs/dev-notes.md`: dated design decisions and checks
 - `docs/prompt-criteria.md`, `docs/prompt-log.md`: prompt test criteria and every run
 - `Vivid Description.md`: design and screen notes
