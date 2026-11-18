@@ -154,7 +154,7 @@ Grouped by stage. Links go to the commits.
   confidence calibrated. Recorded as a limitation instead.
 - Terminal output for all three runs is in `docs/screenshots/tests/`.
 
-**6. Trigger and user check (18 Nov)**
+**6. Trigger and user check (16 Nov)**
 - Tested the trigger live. Rushed agrees took 0.7–1.3 s; considered decisions took 19–129 s, so I
   kept the 4-second threshold. The prompt then fired naturally, without the shortcut (Storyboard B).
 - User check: another person tried their own claims. Most were predictions or opinions, which the
@@ -164,7 +164,7 @@ Grouped by stage. Links go to the commits.
 ## AI assistance
 
 **Tools used**
-- **Claude Code** (Anthropic): aided in some bits of code, tests and scripts from my specifications.
+- **Claude Code** (Anthropic): aided in coding, tests and scripts from my specifications.
   Commits authored by "Claude" in the history are from Claude Code; I reviewed and merged them.
 - **Claude** (claude.ai chat): helped plan the scope and milestones to structure development, checked the architecture diagram against the code, and compose the storyboards from my
   screenshots.
