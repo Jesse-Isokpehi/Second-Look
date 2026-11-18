@@ -168,6 +168,7 @@ Grouped by stage. Links go to the commits.
   Commits authored by "Claude" in the history are from Claude Code; I reviewed and merged them.
 - **Claude** (claude.ai chat): helped plan the scope and milestones to structure development, checked the architecture diagram against the code, and compose the storyboards from my
   screenshots.
+- **Claude** (claude.ai chat):reviewed my report drafts for grammatical and phrasing issues.
 - **Claude design canvas:** screen mockups and theme before coding.
 - **Claude API** (`claude-sonnet-5-5`): the live model inside the app. I paid for the key myself.
 
